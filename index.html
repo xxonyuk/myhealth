@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MYHEALTH</title>
+<meta name="theme-color" content="#ffffff">
+<!-- 아이폰 '홈 화면에 추가' 시 앱처럼 전체화면으로 실행 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="MYHEALTH">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><h1>🥗 MYHEALTH</h1></header>
+
+<main>
+  <!-- 오늘 -->
+  <section id="tab-today">
+    <div class="datebar">
+      <button id="prevDay">‹</button>
+      <strong id="dateLabel"></strong>
+      <button id="nextDay">›</button>
+    </div>
+
+    <div class="card" id="summary"></div>
+
+    <div class="card">
+      <h2>음식 추가</h2>
+      <div class="row">
+        <input id="searchInput" type="search" placeholder="음식 검색 (예: 닭가슴살, 김밥)" enterkeyhint="search">
+        <button class="btn small" id="scanBtn" title="바코드 스캔">📷</button>
+      </div>
+      <div class="chips" id="recentChips"></div>
+      <div class="results" id="results"></div>
+
+      <details id="manualBox">
+        <summary>직접 입력</summary>
+        <div class="grid" style="margin-top:10px">
+          <label>음식 이름<input id="fName" placeholder="예: 엄마표 잡채"></label>
+          <label>제공량<input id="fServing" placeholder="1인분"></label>
+          <label>칼로리 (kcal)<input id="fKcal" type="number" inputmode="decimal"></label>
+          <label>탄수화물 (g)<input id="fCarb" type="number" inputmode="decimal"></label>
+          <label>단백질 (g)<input id="fProtein" type="number" inputmode="decimal"></label>
+          <label>지방 (g)<input id="fFat" type="number" inputmode="decimal"></label>
+        </div>
+        <input id="fBarcode" type="hidden">
+        <p class="muted hidden" id="fBarcodeNote"></p>
+        <label class="check"><input type="checkbox" id="fSave" checked> 내 음식에 저장 (다음부터 검색됨)</label>
+        <button class="btn" id="addManual">추가</button>
+      </details>
+    </div>
+
+    <div class="card" id="mealList"></div>
+  </section>
+
+  <!-- 인바디 -->
+  <section id="tab-inbody" class="hidden">
+    <div class="card">
+      <h2>기본 정보</h2>
+      <div class="grid">
+        <label>성별
+          <select id="pSex"><option value="M">남성</option><option value="F">여성</option></select>
+        </label>
+        <label>나이<input id="pAge" type="number"></label>
+        <label>키 (cm)<input id="pHeight" type="number"></label>
+        <label>활동량
+          <select id="pActivity">
+            <option value="1.2">거의 안 움직임</option>
+            <option value="1.375">주 1~3회 운동</option>
+            <option value="1.55">주 3~5회 운동</option>
+            <option value="1.725">주 6~7회 운동</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>인바디 측정값</h2>
+      <div class="grid">
+        <label>측정일<input id="iDate" type="date"></label>
+        <label>체중 (kg)<input id="iWeight" type="number" step="0.1" inputmode="decimal"></label>
+        <label>골격근량 (kg)<input id="iSmm" type="number" step="0.1" inputmode="decimal"></label>
+        <label>체지방률 (%)<input id="iFat" type="number" step="0.1" inputmode="decimal"></label>
+        <label>기초대사량 (선택)<input id="iBmr" type="number" placeholder="결과지 값"></label>
+      </div>
+      <button class="btn" id="saveInbody">저장 & 분석</button>
+    </div>
+
+    <div class="card" id="analysis"></div>
+  </section>
+
+  <!-- 기록 -->
+  <section id="tab-history" class="hidden">
+    <div class="card">
+      <h2>일별 섭취 기록</h2>
+      <div id="historyTable"></div>
+    </div>
+    <div class="card">
+      <h2>인바디 이력</h2>
+      <div id="inbodyTable"></div>
+    </div>
+  </section>
+
+  <!-- 설정 -->
+  <section id="tab-settings" class="hidden">
+    <div class="card">
+      <h2>식약처 음식 검색 API</h2>
+      <p class="muted">공공데이터포털(data.go.kr)에서 "식품의약품안전처_식품영양성분DB정보"를 활용신청하고 받은
+        <b>일반 인증키 (Decoding)</b>를 넣으면 수만 개의 음식·가공식품을 검색할 수 있어요.</p>
+      <input id="mfdsKey" placeholder="인증키 붙여넣기">
+      <button class="btn" id="saveKey">저장</button>
+    </div>
+    <div class="card">
+      <h2>내 음식</h2>
+      <div id="myFoodsList"></div>
+    </div>
+    <div class="card">
+      <h2>백업</h2>
+      <p class="muted">기록은 이 기기의 브라우저에만 저장돼요. 기기를 바꾸거나 PC↔폰으로 옮길 때 백업 파일을 사용하세요.</p>
+      <button class="btn ghost" id="exportBtn">백업 파일 저장</button>
+      <label class="btn ghost" style="text-align:center;flex-direction:row;justify-content:center">
+        백업 파일 불러오기<input type="file" id="importFile" accept="application/json" class="hidden">
+      </label>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="today" class="active"><span>🍽️</span>오늘</button>
+  <button data-tab="inbody"><span>💪</span>인바디</button>
+  <button data-tab="history"><span>📊</span>기록</button>
+  <button data-tab="settings"><span>⚙️</span>설정</button>
+</nav>
+
+<!-- 음식 상세 시트 -->
+<div class="sheet-bg hidden" id="foodSheet">
+  <div class="sheet">
+    <button class="close" data-close>×</button>
+    <h2 id="sName"></h2>
+    <div class="muted" id="sMeta"></div>
+    <div class="grid" style="margin-top:14px">
+      <label>양<input id="sAmount" type="number" inputmode="decimal" step="0.5"></label>
+      <label>단위<select id="sUnit"></select></label>
+    </div>
+    <div class="macro-grid" id="sMacros"></div>
+    <label>끼니
+      <select id="sMeal"><option>아침</option><option>점심</option><option>저녁</option><option>간식</option></select>
+    </label>
+    <label class="check hidden" id="sSaveWrap"><input type="checkbox" id="sSave"> 내 음식에 저장</label>
+    <button class="btn" id="sAdd">기록하기</button>
+  </div>
+</div>
+
+<!-- 바코드 스캐너 시트 -->
+<div class="sheet-bg hidden" id="scanSheet">
+  <div class="sheet">
+    <button class="close" data-close>×</button>
+    <h2>바코드 스캔</h2>
+    <p class="muted" id="scanStatus">카메라를 바코드에 맞춰주세요.</p>
+    <div id="reader"></div>
+    <label class="btn ghost" style="text-align:center;flex-direction:row;justify-content:center">
+      📸 사진 찍어서 인식<input type="file" id="scanFile" accept="image/*" capture="environment" class="hidden">
+    </label>
+    <div class="row" style="margin-top:12px">
+      <input id="barcodeInput" inputmode="numeric" placeholder="바코드 숫자 직접 입력">
+      <button class="btn small" id="barcodeGo">조회</button>
+    </div>
+  </div>
+</div>
+
+<script src="foods-kr.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

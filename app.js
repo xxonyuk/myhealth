@@ -70,26 +70,37 @@ function searchLocal(q) {
 // 식약처 식품영양성분DB (공공데이터포털)
 async function searchMfds(q) {
   if (!mfdsKey) return [];
-  const url = 'https://apis.data.go.kr/1471000/FoodNtrCpntDbInfo02/getFoodNtrCpntDbInq02'
-    + `?serviceKey=${encodeURIComponent(mfdsKey)}&pageNo=1&numOfRows=30&type=json&FOOD_NM_KR=${encodeURIComponent(q)}`;
+  const url = 'https://apis.data.go.kr/1471000/FoodNtrCpntDbInfo03/getFoodNtrCpntDbInq03'
+    + `?serviceKey=${encodeURIComponent(mfdsKey)}&pageNo=1&numOfRows=100&type=json&FOOD_NM_KR=${encodeURIComponent(q)}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error(`식약처 API 오류 (${res.status})`);
   const data = await res.json();
   let items = data?.body?.items ?? [];
   if (!Array.isArray(items)) items = items.item ? [].concat(items.item) : [];
   return items.map((it) => {
-    const serving = it.SERVING_SIZE || '100g';
-    const g = parseFloat(serving);
+    // 영양값은 SERVING_SIZE(보통 100g/100mL) 기준, Z10500은 제품 1개(총) 중량
+    const base = parseFloat(it.SERVING_SIZE) || 100;
+    const unit = /ml/i.test(it.SERVING_SIZE || '') ? 'mL' : 'g';
+    const whole = parseFloat(String(it.Z10500 || '').replace(/,/g, ''));
+    // 1개 중량이 한 번에 먹을 만한 양이면 1개 기준으로 보여줌 (대용량 묶음은 100g 기준 유지)
+    const perPack = whole >= 10 && whole <= 700 && whole !== base;
+    const g = perPack ? whole : base;
+    const k = g / base;
+    const v = (x) => num(x) * k;
+    const ov = (x) => { const o = optNum(x); return o == null ? null : o * k; };
     return {
       src: 'mfds',
       name: it.FOOD_NM_KR,
       brand: it.MAKER_NM && it.MAKER_NM !== '해당없음' ? it.MAKER_NM : '',
-      servingLabel: serving,
-      servingG: /g|ml/i.test(serving) && g > 0 ? g : null,
-      n: { kcal: num(it.AMT_NUM1), protein: num(it.AMT_NUM3), fat: num(it.AMT_NUM4), carb: num(it.AMT_NUM6),
-           sugar: optNum(it.AMT_NUM7), sodium: optNum(it.AMT_NUM13) },
+      servingLabel: perPack ? `${it.DB_GRP_CM === 'D' ? '1인분' : '1개'} (${round(g)}${unit})` : `${round(g)}${unit}`,
+      servingG: g,
+      n: { kcal: v(it.AMT_NUM1), protein: v(it.AMT_NUM3), fat: v(it.AMT_NUM4), carb: v(it.AMT_NUM6),
+           sugar: ov(it.AMT_NUM7), sodium: ov(it.AMT_NUM13) },
     };
-  }).filter((f) => f.name);
+  }).filter((f) => f.name)
+    // 이름이 검색어와 똑같거나 검색어로 시작하는 것을 위로, 그다음 짧은 이름 순
+    .map((f) => ({ f, r: (f.name === q ? 0 : f.name.startsWith(q) ? 1 : 2) * 1000 + f.name.length }))
+    .sort((a, b) => a.r - b.r).map((x) => x.f);
 }
 
 // Open Food Facts → 공통 음식 객체

@@ -3,3 +3,7 @@
 /*.jpeg
 /*.png
 /*.heic
+
+# API 인증키 (로컬 전용)
+keys.txt
+*.local.*

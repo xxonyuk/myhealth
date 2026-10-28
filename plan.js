@@ -27,32 +27,32 @@ const FREQS = [
   { v: '7+', label: '주 7회 이상', factor: 1.9, note: '매우 많은 활동' },
 ];
 
-// 식단에 쓰는 음식 (100g 기준, 대략적인 값)
+// 식단에 쓰는 음식 (100g 기준, 대략적인 값 · s 당류 g, na 나트륨 mg)
 // cat: carb 탄수화물 / protein 단백질 / fat 지방 / veg 채소
 const PLAN_FOODS = [
-  { key: 'brownrice', name: '현미밥',   cat: 'carb', kcal: 143, c: 30.5, p: 3,    f: 1 },
-  { key: 'whiterice', name: '흰쌀밥',   cat: 'carb', kcal: 150, c: 33,   p: 2.7,  f: 0.3 },
-  { key: 'sweetpot',  name: '고구마',   cat: 'carb', kcal: 128, c: 31,   p: 1.4,  f: 0.2 },
-  { key: 'potato',    name: '감자',     cat: 'carb', kcal: 70,  c: 16,   p: 2,    f: 0.1 },
-  { key: 'oatmeal',   name: '오트밀',   cat: 'carb', kcal: 380, c: 67,   p: 13,   f: 7, max: 100 },
-  { key: 'chicken',   name: '닭가슴살', cat: 'protein', kcal: 109, c: 0,   p: 23,   f: 1.2 },
-  { key: 'thigh',     name: '닭다리살(껍질 제거)', cat: 'protein', kcal: 120, c: 0, p: 19, f: 4.5 },
-  { key: 'egg',       name: '계란',     cat: 'protein', kcal: 143, c: 0.7, p: 12.6, f: 9.6, unit: 50, unitName: '개' },
-  { key: 'tofu',      name: '두부',     cat: 'protein', kcal: 84,  c: 1.7, p: 8.6,  f: 5, max: 200 },
-  { key: 'tuna',      name: '참치(기름 뺀)', cat: 'protein', kcal: 120, c: 0, p: 25, f: 2 },
-  { key: 'beef',      name: '소고기 우둔살', cat: 'protein', kcal: 140, c: 0, p: 21, f: 5.5 },
-  { key: 'pork',      name: '돼지 안심', cat: 'protein', kcal: 120, c: 0,  p: 22,   f: 3.5 },
-  { key: 'greek',     name: '그릭요거트', cat: 'protein', kcal: 100, c: 5,  p: 9,    f: 4.5, max: 200 },
-  { key: 'almond',    name: '아몬드',   cat: 'fat', kcal: 580, c: 20,  p: 21,   f: 50, max: 30 },
-  { key: 'walnut',    name: '호두',     cat: 'fat', kcal: 650, c: 14,  p: 15,   f: 65, max: 30 },
-  { key: 'olive',     name: '올리브오일', cat: 'fat', kcal: 884, c: 0, p: 0,    f: 100, max: 15 },
-  { key: 'avocado',   name: '아보카도', cat: 'fat', kcal: 160, c: 8.5, p: 2,    f: 15, max: 100 },
-  { key: 'broccoli',  name: '브로콜리', cat: 'veg', kcal: 34,  c: 7,   p: 2.8,  f: 0.4 },
-  { key: 'cabbage',   name: '양배추',   cat: 'veg', kcal: 25,  c: 6,   p: 1.3,  f: 0.1 },
-  { key: 'lettuce',   name: '상추',     cat: 'veg', kcal: 15,  c: 3,   p: 1.4,  f: 0.2 },
-  { key: 'cucumber',  name: '오이',     cat: 'veg', kcal: 15,  c: 3.6, p: 0.7,  f: 0.1 },
-  { key: 'tomato',    name: '토마토',   cat: 'veg', kcal: 18,  c: 3.9, p: 0.9,  f: 0.2 },
-  { key: 'kimchi',    name: '김치',     cat: 'veg', kcal: 30,  c: 4.8, p: 2,    f: 0.6, max: 50 },
+  { key: 'brownrice', name: '현미밥',   cat: 'carb', kcal: 143, c: 30.5, p: 3,    f: 1, s: 0, na: 2 },
+  { key: 'whiterice', name: '흰쌀밥',   cat: 'carb', kcal: 150, c: 33,   p: 2.7,  f: 0.3, s: 0, na: 2 },
+  { key: 'sweetpot',  name: '고구마',   cat: 'carb', kcal: 128, c: 31,   p: 1.4,  f: 0.2, s: 6, na: 20 },
+  { key: 'potato',    name: '감자',     cat: 'carb', kcal: 70,  c: 16,   p: 2,    f: 0.1, s: 0.8, na: 5 },
+  { key: 'oatmeal',   name: '오트밀',   cat: 'carb', kcal: 380, c: 67,   p: 13,   f: 7, s: 1, na: 5, max: 100 },
+  { key: 'chicken',   name: '닭가슴살', cat: 'protein', kcal: 109, c: 0,   p: 23,   f: 1.2, s: 0, na: 60 },
+  { key: 'thigh',     name: '닭다리살(껍질 제거)', cat: 'protein', kcal: 120, c: 0, p: 19, f: 4.5, s: 0, na: 80 },
+  { key: 'egg',       name: '계란',     cat: 'protein', kcal: 143, c: 0.7, p: 12.6, f: 9.6, s: 0.4, na: 140, unit: 50, unitName: '개' },
+  { key: 'tofu',      name: '두부',     cat: 'protein', kcal: 84,  c: 1.7, p: 8.6,  f: 5, s: 0.7, na: 7, max: 200 },
+  { key: 'tuna',      name: '참치(기름 뺀)', cat: 'protein', kcal: 120, c: 0, p: 25, f: 2, s: 0, na: 400 },
+  { key: 'beef',      name: '소고기 우둔살', cat: 'protein', kcal: 140, c: 0, p: 21, f: 5.5, s: 0, na: 55 },
+  { key: 'pork',      name: '돼지 안심', cat: 'protein', kcal: 120, c: 0,  p: 22,   f: 3.5, s: 0, na: 55 },
+  { key: 'greek',     name: '그릭요거트', cat: 'protein', kcal: 100, c: 5,  p: 9,    f: 4.5, s: 4, na: 40, max: 200 },
+  { key: 'almond',    name: '아몬드',   cat: 'fat', kcal: 580, c: 20,  p: 21,   f: 50, s: 4.4, na: 1, max: 30 },
+  { key: 'walnut',    name: '호두',     cat: 'fat', kcal: 650, c: 14,  p: 15,   f: 65, s: 2.6, na: 2, max: 30 },
+  { key: 'olive',     name: '올리브오일', cat: 'fat', kcal: 884, c: 0, p: 0,    f: 100, s: 0, na: 0, max: 15 },
+  { key: 'avocado',   name: '아보카도', cat: 'fat', kcal: 160, c: 8.5, p: 2,    f: 15, s: 0.7, na: 7, max: 100 },
+  { key: 'broccoli',  name: '브로콜리', cat: 'veg', kcal: 34,  c: 7,   p: 2.8,  f: 0.4, s: 1.7, na: 30 },
+  { key: 'cabbage',   name: '양배추',   cat: 'veg', kcal: 25,  c: 6,   p: 1.3,  f: 0.1, s: 3.2, na: 15 },
+  { key: 'lettuce',   name: '상추',     cat: 'veg', kcal: 15,  c: 3,   p: 1.4,  f: 0.2, s: 0.8, na: 10 },
+  { key: 'cucumber',  name: '오이',     cat: 'veg', kcal: 15,  c: 3.6, p: 0.7,  f: 0.1, s: 1.7, na: 2 },
+  { key: 'tomato',    name: '토마토',   cat: 'veg', kcal: 18,  c: 3.9, p: 0.9,  f: 0.2, s: 2.6, na: 5 },
+  { key: 'kimchi',    name: '김치',     cat: 'veg', kcal: 30,  c: 4.8, p: 2,    f: 0.6, s: 2, na: 650, max: 50 },
 ];
 const CAT_NAME = { carb: '탄수화물', protein: '단백질', fat: '지방', veg: '채소', snack: '간식' };
 
@@ -123,7 +123,7 @@ const MEAL_SPLITS = {
 
 function nutrientsOf(food, g) {
   const m = g / 100;
-  return { kcal: food.kcal * m, carb: food.c * m, protein: food.p * m, fat: food.f * m };
+  return { kcal: food.kcal * m, carb: food.c * m, protein: food.p * m, fat: food.f * m, sugar: food.s * m, sodium: food.na * m };
 }
 
 function buildMealPlan(plan, profile) {
@@ -181,10 +181,10 @@ function buildMealPlan(plan, profile) {
       const g = (target.fat - sum('fat')) / (fatFood.f / 100);
       if (g >= 5) add(fatFood, Math.min(fatFood.max || 30, round(g, 5)));
     }
-    meals.push({ name, items, total: { kcal: sum('kcal'), carb: sum('carb'), protein: sum('protein'), fat: sum('fat') } });
+    meals.push({ name, items, total: { kcal: sum('kcal'), carb: sum('carb'), protein: sum('protein'), fat: sum('fat'), sugar: sum('sugar'), sodium: sum('sodium') } });
   });
 
-  const total = ['kcal', 'carb', 'protein', 'fat'].reduce((t, k) => ({ ...t, [k]: meals.reduce((s, m) => s + m.total[k], 0) }), {});
+  const total = ['kcal', 'carb', 'protein', 'fat', 'sugar', 'sodium'].reduce((t, k) => ({ ...t, [k]: meals.reduce((s, m) => s + m.total[k], 0) }), {});
   return { meals, total };
 }
 

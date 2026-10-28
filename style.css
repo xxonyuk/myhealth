@@ -1,7 +1,7 @@
 :root {
   --bg: #f5f6f8; --card: #fff; --text: #1d2129; --muted: #6b7280; --line: #e5e7eb;
   --accent: #2563eb; --cut: #ef4444; --lean: #10b981; --bulk: #f59e0b;
-  --carb: #60a5fa; --protein: #f472b6; --fat: #fbbf24;
+  --carb: #60a5fa; --protein: #f472b6; --fat: #fbbf24; --sugar: #a78bfa; --sodium: #94a3b8;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 body {
@@ -89,7 +89,7 @@ td, th { padding: 8px 4px; text-align: left; border-bottom: 1px solid var(--line
 }
 .sheet h2 { margin: 0 0 4px; font-size: 18px; }
 .sheet .close { float: right; border: 0; background: none; font-size: 24px; color: var(--muted); cursor: pointer; }
-.macro-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 14px 0; text-align: center; }
+.macro-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 14px 0; text-align: center; }
 .macro-grid div { background: var(--bg); border-radius: 10px; padding: 8px 2px; }
 .macro-grid b { display: block; font-size: 17px; }
 .macro-grid small { color: var(--muted); font-size: 11px; }

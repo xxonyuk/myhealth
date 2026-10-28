@@ -58,6 +58,8 @@
           <label>탄수화물 (g)<input id="fCarb" type="number" inputmode="decimal"></label>
           <label>단백질 (g)<input id="fProtein" type="number" inputmode="decimal"></label>
           <label>지방 (g)<input id="fFat" type="number" inputmode="decimal"></label>
+          <label>당류 (g)<input id="fSugar" type="number" inputmode="decimal" placeholder="모르면 비움"></label>
+          <label>나트륨 (mg)<input id="fSodium" type="number" inputmode="decimal" placeholder="모르면 비움"></label>
         </div>
         <input id="fBarcode" type="hidden">
         <p class="muted hidden" id="fBarcodeNote"></p>
@@ -72,10 +74,10 @@
     <div class="card">
       <h2>인바디</h2>
       <label class="btn ghost" style="text-align:center;flex-direction:row;justify-content:center;margin-top:0">
-        📷 인바디 결과지 사진으로 채우기<input type="file" id="ibOcrFile" accept="image/*" class="hidden">
+        📄 인바디 앱 CSV 불러오기<input type="file" id="ibCsvFile" accept=".csv,text/csv,text/comma-separated-values" class="hidden">
       </label>
-      <p class="muted hidden" id="ibOcrStatus"></p>
-      <details class="hidden" id="ibOcrRawBox"><summary>인식된 글자 보기</summary><pre id="ibOcrRaw"></pre></details>
+      <p class="muted" style="margin:8px 0 0">인바디 앱 → 기록 → 내보내기로 받은 CSV 파일을 선택하면 전체 측정 기록이 들어가요. 직접 입력해도 돼요.</p>
+      <p class="muted hidden" id="ibCsvStatus"></p>
       <div class="grid" style="margin-top:12px">
         <label>측정일<input id="iDate" type="date"></label>
         <label>체중 (kg)<input id="iWeight" type="number" step="0.1" inputmode="decimal"></label>

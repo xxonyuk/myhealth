@@ -29,6 +29,12 @@ const $ = (id) => document.getElementById(id);
 const num = (v) => Number(v) || 0;
 const round = (v) => Math.round(v);
 const r1 = (v) => Math.round(v * 10) / 10;
+const optNum = (v) => (v === '' || v == null || isNaN(Number(v)) ? null : Number(v));
+const opt = (v, digits = 1) => (v == null ? null : Math.round(v * 10 ** digits) / 10 ** digits);
+const show = (v, unit, digits = 1) => (v == null ? '–' : `${opt(v, digits)}${unit}`);
+const NUTRIENTS = ['kcal', 'carb', 'protein', 'fat', 'sugar', 'sodium'];
+// 하루 권장 상한: 당류 50g (총열량 10%, WHO), 나트륨 2,000mg (WHO)
+const LIMITS = { sugar: 50, sodium: 2000 };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const norm = (s) => s.toLowerCase().replace(/\s+/g, '');
 const toKey = (d) => {
@@ -51,7 +57,8 @@ function calcTargets() {
 function dayTotals(key) {
   return (foods[key] || []).reduce((t, f) => ({
     kcal: t.kcal + f.kcal, carb: t.carb + f.carb, protein: t.protein + f.protein, fat: t.fat + f.fat,
-  }), { kcal: 0, carb: 0, protein: 0, fat: 0 });
+    sugar: t.sugar + (f.sugar ?? 0), sodium: t.sodium + (f.sodium ?? 0),
+  }), { kcal: 0, carb: 0, protein: 0, fat: 0, sugar: 0, sodium: 0 });
 }
 
 // ---------- 음식 검색 ----------
@@ -79,7 +86,8 @@ async function searchMfds(q) {
       brand: it.MAKER_NM && it.MAKER_NM !== '해당없음' ? it.MAKER_NM : '',
       servingLabel: serving,
       servingG: /g|ml/i.test(serving) && g > 0 ? g : null,
-      n: { kcal: num(it.AMT_NUM1), protein: num(it.AMT_NUM3), fat: num(it.AMT_NUM4), carb: num(it.AMT_NUM6) },
+      n: { kcal: num(it.AMT_NUM1), protein: num(it.AMT_NUM3), fat: num(it.AMT_NUM4), carb: num(it.AMT_NUM6),
+           sugar: optNum(it.AMT_NUM7), sodium: optNum(it.AMT_NUM13) },
     };
   }).filter((f) => f.name);
 }
@@ -89,7 +97,12 @@ function fromOff(p, code) {
   const nm = p.nutriments || {};
   const kcal100 = nm['energy-kcal_100g'] ?? (nm.energy_100g != null ? nm.energy_100g / 4.184 : null);
   if (kcal100 == null) return null;
-  const per100 = { kcal: num(kcal100), carb: num(nm.carbohydrates_100g), protein: num(nm.proteins_100g), fat: num(nm.fat_100g) };
+  // 나트륨은 g 단위로 오므로 mg로 변환 (나트륨이 없고 소금만 있으면 소금 ÷ 2.5)
+  const sodium100 = nm.sodium_100g ?? (nm.salt_100g != null ? nm.salt_100g / 2.5 : null);
+  const per100 = {
+    kcal: num(kcal100), carb: num(nm.carbohydrates_100g), protein: num(nm.proteins_100g), fat: num(nm.fat_100g),
+    sugar: optNum(nm.sugars_100g), sodium: sodium100 == null ? null : sodium100 * 1000,
+  };
   const sq = num(p.serving_quantity);
   return {
     src: 'off',
@@ -151,8 +164,9 @@ function renderResults(note = '') {
 // ---------- 음식 상세 시트 ----------
 let sheetFood = null;
 
+// 당류·나트륨은 정보가 없는 음식이 있어서 null(모름)을 유지
 function scale(n, m) {
-  return { kcal: n.kcal * m, carb: n.carb * m, protein: n.protein * m, fat: n.fat * m };
+  return Object.fromEntries(NUTRIENTS.map((k) => [k, n[k] == null ? null : n[k] * m]));
 }
 
 function sheetMultiplier() {
@@ -181,7 +195,9 @@ function updateSheetMacros() {
     <div><b>${round(n.kcal)}</b><small>kcal</small></div>
     <div><b>${r1(n.carb)}</b><small>탄수화물 g</small></div>
     <div><b>${r1(n.protein)}</b><small>단백질 g</small></div>
-    <div><b>${r1(n.fat)}</b><small>지방 g</small></div>`;
+    <div><b>${r1(n.fat)}</b><small>지방 g</small></div>
+    <div><b>${show(n.sugar, '')}</b><small>당류 g</small></div>
+    <div><b>${show(n.sodium, '', 0)}</b><small>나트륨 mg</small></div>`;
 }
 
 function guessMeal() {
@@ -196,7 +212,7 @@ function logFood(food, multiplier, meal, amountText) {
   const key = toKey(currentDate);
   (foods[key] ||= []).push({
     id: Date.now() + Math.random(), meal, name: food.name, amount: amountText,
-    kcal: r1(n.kcal), carb: r1(n.carb), protein: r1(n.protein), fat: r1(n.fat),
+    kcal: r1(n.kcal), carb: r1(n.carb), protein: r1(n.protein), fat: r1(n.fat), sugar: opt(n.sugar), sodium: opt(n.sodium, 0),
   });
   store.set('foods', foods);
 
@@ -246,9 +262,15 @@ function renderToday() {
       ${bar('탄수화물', t.carb, g.carb, 'var(--carb)', 'g')}
       ${bar('단백질', t.protein, g.protein, 'var(--protein)', 'g')}
       ${bar('지방', t.fat, g.fat, 'var(--fat)', 'g')}
+      ${bar('당류 (상한)', t.sugar, LIMITS.sugar, 'var(--sugar)', 'g')}
+      ${bar('나트륨 (상한)', t.sodium, LIMITS.sodium, 'var(--sodium)', 'mg')}
     </div>` : `
     <div class="muted">섭취 칼로리</div>
     <div class="big">${round(t.kcal)} kcal</div>
+    <div style="margin-top:14px">
+      ${bar('당류 (상한)', t.sugar, LIMITS.sugar, 'var(--sugar)', 'g')}
+      ${bar('나트륨 (상한)', t.sodium, LIMITS.sodium, 'var(--sodium)', 'mg')}
+    </div>
     <p class="muted">목표 탭에서 인바디와 내 정보를 입력하면 목표 칼로리와 탄단지가 계산됩니다.</p>`;
 
   $('recentChips').innerHTML = recent.length
@@ -265,7 +287,7 @@ function renderToday() {
   $('mealList').innerHTML = `<h2>${currentMeal} · ${round(mealKcal(currentMeal))} kcal</h2>` + (items.length ? items.map((f) => `
     <div class="food">
       <div>${esc(f.name)}${f.amount ? ` <small>${esc(f.amount)}</small>` : ''}<br>
-        <small>탄 ${r1(f.carb)}g · 단 ${r1(f.protein)}g · 지 ${r1(f.fat)}g</small></div>
+        <small>탄 ${r1(f.carb)}g · 단 ${r1(f.protein)}g · 지 ${r1(f.fat)}g · 당 ${show(f.sugar, 'g')} · 나트륨 ${show(f.sodium, 'mg', 0)}</small></div>
       <div style="white-space:nowrap">${round(f.kcal)} kcal <button data-del="${f.id}" title="삭제">×</button></div>
     </div>`).join('') : `<p class="muted">${currentMeal}에 먹은 음식이 없어요.</p>`);
   $('addTitle').textContent = `${currentMeal}에 음식 추가`;
@@ -291,7 +313,7 @@ function renderInbody() {
   renderFoodPrefs();
 
   const ib = latestInbody();
-  $('iDate').value = toKey(new Date());
+  $('iDate').value = ib ? ib.date : toKey(new Date());   // 최근 기록을 보여주고, 새 측정이면 날짜를 바꿔서 저장
   if (ib) {
     $('iWeight').value = ib.weight;
     $('iSmm').value = ib.smm || '';
@@ -388,6 +410,7 @@ function renderMealPlan(g) {
         .map((v, i) => `<td>${i < 2 ? v : fmt(v, i === 2 ? 0 : 1)}</td>`).join('')}</tr>
       <tr class="muted-row"><td>목표</td><td></td><td>${fmt(g.kcal)}</td><td>${fmt(g.carb)}</td><td>${fmt(g.protein)}</td><td>${fmt(g.fat)}</td></tr>
     </table></div>
+    <p class="muted">하루 당류 약 ${fmt(plan.total.sugar)}g (상한 ${LIMITS.sugar}g) · 나트륨 약 ${fmt(plan.total.sodium)}mg (상한 ${fmt(LIMITS.sodium)}mg, 양념·소스 제외)</p>
     <button class="btn ghost" id="logPlan">오늘 식단에 이대로 기록하기</button>`;
   $('logPlan').onclick = () => {
     if (!confirm('추천 식단을 오늘 날짜 끼니별로 기록할까요?')) return;
@@ -397,6 +420,7 @@ function renderMealPlan(g) {
       m.items.forEach((it) => (foods[key] ||= []).push({
         id: Date.now() + Math.random(), meal, name: it.food.name, amount: amount(it),
         kcal: r1(it.n.kcal), carb: r1(it.n.carb), protein: r1(it.n.protein), fat: r1(it.n.fat),
+        sugar: opt(it.n.sugar), sodium: opt(it.n.sodium, 0),
       }));
     });
     store.set('foods', foods);
@@ -435,78 +459,56 @@ function renderPlanExtras(g, plan) {
     <h3 class="step">더 좋아지려면</h3>${li(ev.tips)}`;
 }
 
-// ---------- 인바디 결과지 OCR ----------
-function parseInbody(raw) {
-  const t = raw.replace(/(\d),(\d)/g, '$1.$2').replace(/[：:]/g, ' ');
-  const word = (w) => [...w].join('\\s*');
-  // 라벨 뒤 25글자 안의 첫 숫자 중 범위에 맞는 값
-  const pick = (labels, min, max) => {
-    for (const label of labels) {
-      const re = new RegExp(`${/[가-힣]/.test(label) ? word(label) : label}[^\\d\\n]{0,25}?(\\d{1,4}(?:\\.\\d)?)`, 'gi');
-      for (const m of t.matchAll(re)) {
-        const v = Number(m[1]);
-        if (v >= min && v <= max) return v;
-      }
-    }
-    return null;
-  };
-  const r = {
-    weight: pick(['체중', 'Weight'], 30, 200),
-    smm: pick(['골격근량', 'SMM', 'Skeletal Muscle Mass'], 10, 70),
-    bodyFat: pick(['체지방률', 'PBF', 'Percent Body Fat'], 3, 60),
-    bmr: pick(['기초대사량', 'BMR', 'Basal Metabolic Rate'], 800, 3500),
-    height: pick(['신장', '키', 'Height'], 120, 220),
-    age: pick(['나이', '연령', 'Age'], 10, 100),
-  };
-  // 체지방률이 없으면 체지방량 ÷ 체중으로 계산
-  if (r.bodyFat == null && r.weight) {
-    const fatMass = pick(['체지방량', 'Body Fat Mass'], 2, 100);
-    if (fatMass) r.bodyFat = Math.round((fatMass / r.weight) * 1000) / 10;
-  }
-  // "175cm"를 "17507"처럼 단위까지 숫자로 읽는 경우: 신장 뒤 앞자리 3개만 사용
-  if (r.height == null) {
-    const m = t.match(new RegExp(`(?:${word('신장')}|Height)[^\\d\\n]{0,10}(1\\d{2})`, 'i'));
-    if (m) r.height = Number(m[1]);
-  }
-  if (/여\s*성|Female/i.test(t)) r.sex = 'F';
-  else if (/남\s*성|Male/i.test(t)) r.sex = 'M';
-  return r;
+// ---------- 인바디 CSV (인바디 앱 → 내보내기) ----------
+// 열 순서가 바뀌어도 되도록 열 이름으로 찾음. 값이 "-"면 측정 안 된 항목
+const INBODY_COLS = {
+  weight: '체중(kg)', smm: '골격근량(kg)', muscle: '근육량(kg)', fatMass: '체지방량(kg)', bmi: 'BMI(kg/m²)',
+  bodyFat: '체지방률(%)', bmr: '기초대사량(kcal)', score: '인바디점수', visceral: '내장지방레벨(Level)', water: '체수분(L)',
+};
+
+function decodeCsv(buf) {
+  const utf8 = new TextDecoder('utf-8').decode(buf);
+  // 깨진 글자가 있으면 엑셀식 한글 인코딩(EUC-KR)으로 다시 읽기
+  return utf8.includes('�') ? new TextDecoder('euc-kr').decode(buf) : utf8;
 }
 
-async function runInbodyOcr(file) {
-  const status = $('ibOcrStatus');
-  status.classList.remove('hidden');
-  status.textContent = '사진 준비 중…';
-  try {
-    const worker = await getOcrWorker((m) => {
-      if (m.status === 'recognizing text') status.textContent = `글자 읽는 중… ${Math.round(m.progress * 100)}%`;
-      else if (/load|initializ/.test(m.status)) status.textContent = '인식 엔진 준비 중… (처음 한 번은 몇 초 더 걸려요)';
-    });
-    const image = await prepareImage(file);
-    const keys = ['weight', 'smm', 'bodyFat', 'bmr', 'height', 'age', 'sex'];
-    const r = {};
-    const texts = [];
-    for (const psm of ['4', '6', '11']) {
-      await worker.setParameters({ tessedit_pageseg_mode: psm });
-      const { data } = await worker.recognize(image);
-      texts.push(data.text.trim());
-      const found = parseInbody(data.text);
-      keys.forEach((k) => { if (r[k] == null) r[k] = found[k]; });
-      if (['weight', 'smm', 'bodyFat', 'bmr'].every((k) => r[k] != null)) break;
-      status.textContent = '조금 더 꼼꼼히 읽는 중…';
-    }
-    $('ibOcrRaw').textContent = texts[0] || '(읽은 글자가 없어요)';
-    $('ibOcrRawBox').classList.remove('hidden');
+function parseInbodyCsv(text) {
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
+  const split = (l) => l.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+  const head = split(lines[0] || '');
+  const col = (name) => head.findIndex((h) => h.replace(/\s/g, '') === name.replace(/\s/g, ''));
+  const dateIdx = col('날짜');
+  if (dateIdx < 0 || col(INBODY_COLS.weight) < 0) throw new Error('인바디 앱에서 내보낸 CSV 형식이 아니에요.');
 
-    const fill = { iWeight: r.weight, iSmm: r.smm, iFat: r.bodyFat, iBmr: r.bmr, pHeight: r.height, pAge: r.age, pSex: r.sex };
-    Object.entries(fill).forEach(([id, v]) => { if (v != null) $(id).value = v; });
-    const labels = { weight: '체중', smm: '골격근량', bodyFat: '체지방률', bmr: '기초대사량' };
-    const missing = Object.keys(labels).filter((k) => r[k] == null).map((k) => labels[k]);
-    status.textContent = missing.length === 4
-      ? '값을 찾지 못했어요. 결과지 전체가 나오게, 밝은 곳에서 그림자 없이 다시 찍어보세요.'
-      : `채웠어요! 숫자를 확인하고 "저장 & 분석"을 누르세요.${missing.length ? ` 못 읽은 항목: ${missing.join(', ')}` : ''}`;
+  return lines.slice(1).map((line) => {
+    const v = split(line);
+    const d = (v[dateIdx] || '').replace(/\D/g, '');   // 20261027083801 → 2026-10-27
+    if (d.length < 8) return null;
+    const entry = { date: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` };
+    for (const [key, name] of Object.entries(INBODY_COLS)) {
+      const i = col(name);
+      entry[key] = i >= 0 ? optNum(v[i] === '-' ? null : v[i]) : null;
+    }
+    // 체지방률이 비어 있으면 체지방량 ÷ 체중으로 계산
+    if (entry.bodyFat == null && entry.fatMass && entry.weight) entry.bodyFat = r1((entry.fatMass / entry.weight) * 100);
+    return entry.weight && entry.bodyFat ? entry : null;
+  }).filter(Boolean);
+}
+
+async function importInbodyCsv(file) {
+  const status = $('ibCsvStatus');
+  status.classList.remove('hidden');
+  try {
+    const rows = parseInbodyCsv(decodeCsv(await file.arrayBuffer()));
+    if (!rows.length) throw new Error('측정 기록이 없어요.');
+    const dates = new Set(rows.map((r) => r.date));
+    inbody = inbody.filter((i) => !dates.has(i.date)).concat(rows);
+    store.set('inbody', inbody);
+    const last = latestInbody();
+    status.textContent = `${rows.length}개 측정 기록을 불러왔어요. 최근 ${last.date}: 체중 ${last.weight}kg · 골격근량 ${last.smm ?? '–'}kg · 체지방률 ${last.bodyFat}%`;
+    renderInbody();
   } catch (e) {
-    status.textContent = `인식 실패: ${e.message || e}`;
+    status.textContent = `불러오기 실패: ${e.message}`;
   }
 }
 
@@ -544,9 +546,9 @@ function renderHistory() {
 
   const ibs = [...inbody].sort((a, b) => b.date.localeCompare(a.date));
   $('inbodyTable').innerHTML = ibs.length ? `
-    <table><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방률</th></tr>
-    ${ibs.map((i) => `<tr><td>${i.date}</td><td>${i.weight}</td><td>${i.smm}</td><td>${i.bodyFat}%</td></tr>`).join('')}
-    </table>` : `<p class="muted">인바디 기록이 없습니다.</p>`;
+    <div class="table-wrap"><table class="plan"><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방</th><th>체지방률</th><th>점수</th></tr>
+    ${ibs.map((i) => `<tr><td>${i.date}</td><td>${i.weight}</td><td>${i.smm ?? '–'}</td><td>${i.fatMass ?? '–'}</td><td>${i.bodyFat}%</td><td>${i.score ?? '–'}</td></tr>`).join('')}
+    </table></div>` : `<p class="muted">인바디 기록이 없습니다.</p>`;
 }
 
 // ---------- 렌더: 설정 ----------
@@ -695,6 +697,10 @@ function parseNutrition(raw) {
     return m ? value(m[1], m[2]) : null;
   };
 
+  const sugar = amount('당류');
+  const na = find('나트륨');   // 나트륨은 mg 그대로 (g로 적힌 경우만 ×1000)
+  let sodium = na ? (na[2]?.toLowerCase() === 'g' ? Number(na[1]) * 1000 : Number(na[1])) : null;
+  if (sodium != null && (sodium < 5 || sodium > 10000)) sodium = null;   // "1,790"이 "1"로 잘리는 등 잘못 읽은 값은 비워 둠
   const kcalM = t.match(/(\d+(?:\.\d+)?)\s*k\s*c\s*a\s*l/i) || t.match(new RegExp(`${word('열량')}\\s*(\\d+(?:\\.\\d+)?)`));
   const carb = amount('탄수화물');
   const protein = amount('단백질');
@@ -710,7 +716,7 @@ function parseNutrition(raw) {
   const once = size('1회제공량'), total = size('총내용량');
   const serving = per ? `${per[1]}${per[2]}당` : once ? `1회 ${once}` : total ? `총 ${total}` : '';
 
-  return { kcal: kcalM ? Number(kcalM[1]) : null, carb, protein, fat, serving };
+  return { kcal: kcalM ? Number(kcalM[1]) : null, carb, protein, fat, sugar, sodium, serving };
 }
 
 // "79g"를 "799g"로 읽는 경우처럼 g가 9로 붙은 값은, 열량(탄4·단4·지9 kcal/g)과 더 잘 맞는 쪽으로 고침
@@ -738,7 +744,7 @@ async function runOcr(file) {
     });
     const image = await prepareImage(file);
     // 표 모양에 따라 잘 맞는 읽기 방식이 달라서, 줄 단위(4) → 한 덩어리(6) → 흩어진 글자(11) 순으로 시도하며 빈 항목만 채움
-    let r = { kcal: null, carb: null, protein: null, fat: null, serving: '' };
+    let r = { kcal: null, carb: null, protein: null, fat: null, sugar: null, sodium: null, serving: '' };
     const texts = [];
     for (const psm of ['4', '6', '11']) {
       await worker.setParameters({ tessedit_pageseg_mode: psm });
@@ -759,6 +765,8 @@ async function runOcr(file) {
       if (v == null) missing.push(label);
       else $(id).value = v;
     }
+    if (r.sugar != null) $('fSugar').value = r.sugar;
+    if (r.sodium != null) $('fSodium').value = r.sodium;
     if (r.serving) $('fServing').value = r.serving;
     status.textContent = missing.length === 4
       ? '영양성분을 찾지 못했어요. 표만 크게, 밝은 곳에서 반사 없이 다시 찍어보세요.'
@@ -851,6 +859,8 @@ $('sEdit').onclick = () => {
   $('fCarb').value = r1(f.n.carb);
   $('fProtein').value = r1(f.n.protein);
   $('fFat').value = r1(f.n.fat);
+  $('fSugar').value = opt(f.n.sugar) ?? '';
+  $('fSodium').value = opt(f.n.sodium, 0) ?? '';
   $('fBarcode').value = f.barcode || '';
   $('fBarcodeNote').textContent = f.barcode ? `바코드 ${f.barcode} 와 함께 저장돼서, 다음 스캔부터 고친 값이 나와요.` : '';
   $('fBarcodeNote').classList.toggle('hidden', !f.barcode);
@@ -866,11 +876,12 @@ $('addManual').onclick = () => {
   let food = {
     src: 'my', name, barcode: $('fBarcode').value || undefined,
     servingLabel: $('fServing').value.trim() || '1회', servingG: null,
-    n: { kcal, carb: num($('fCarb').value), protein: num($('fProtein').value), fat: num($('fFat').value) },
+    n: { kcal, carb: num($('fCarb').value), protein: num($('fProtein').value), fat: num($('fFat').value),
+         sugar: optNum($('fSugar').value), sodium: optNum($('fSodium').value) },
   };
   if ($('fSave').checked) food = saveMyFood(food);
   logFood(food, 1, currentMeal, food.servingLabel);
-  ['fName', 'fServing', 'fKcal', 'fCarb', 'fProtein', 'fFat', 'fBarcode'].forEach((id) => ($(id).value = ''));
+  ['fName', 'fServing', 'fKcal', 'fCarb', 'fProtein', 'fFat', 'fSugar', 'fSodium', 'fBarcode'].forEach((id) => ($(id).value = ''));
   ['fBarcodeNote', 'ocrStatus', 'ocrRawBox'].forEach((id) => $(id).classList.add('hidden'));
   $('manualBox').open = false;
 };
@@ -921,7 +932,8 @@ $('saveInbody').onclick = () => {
   const entry = { date: $('iDate').value, weight: num($('iWeight').value), smm: num($('iSmm').value), bodyFat: num($('iFat').value), bmr: num($('iBmr').value) || null };
   if (!entry.date || !entry.weight || !entry.bodyFat) return alert('측정일, 체중, 체지방률은 필수입니다.');
   if (!num(profile.age) || !num(profile.height)) return alert('기초대사량 계산을 위해 나이와 키를 입력하세요.');
-  inbody = inbody.filter((i) => i.date !== entry.date).concat(entry);
+  const prev = inbody.find((i) => i.date === entry.date);   // CSV로 들어온 체지방량·점수 등은 유지
+  inbody = inbody.filter((i) => i !== prev).concat({ ...prev, ...entry });
   store.set('inbody', inbody);
   renderAnalysis();
   $('analysis').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -952,10 +964,10 @@ $('foodPrefs').onclick = (e) => {
   if (calcTargets()) renderMealPlan(calcTargets());
 };
 
-$('ibOcrFile').onchange = (e) => {
+$('ibCsvFile').onchange = (e) => {
   const file = e.target.files[0];
   e.target.value = '';
-  if (file) runInbodyOcr(file);
+  if (file) importInbodyCsv(file);
 };
 
 $('saveKey').onclick = () => {

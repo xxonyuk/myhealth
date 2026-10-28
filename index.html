@@ -22,14 +22,21 @@
   <section id="tab-today">
     <div class="datebar">
       <button id="prevDay">‹</button>
-      <strong id="dateLabel"></strong>
+      <label class="date-pick">
+        <strong id="dateLabel"></strong> 📅
+        <input type="date" id="datePicker">
+      </label>
       <button id="nextDay">›</button>
     </div>
 
     <div class="card" id="summary"></div>
 
+    <div class="meal-tabs" id="mealTabs"></div>
+
+    <div class="card" id="mealList"></div>
+
     <div class="card">
-      <h2>음식 추가</h2>
+      <h2 id="addTitle">음식 추가</h2>
       <div class="row">
         <input id="searchInput" type="search" placeholder="음식 검색 (예: 닭가슴살, 김밥)" enterkeyhint="search">
         <button class="btn small" id="scanBtn" title="바코드 스캔">📷</button>
@@ -38,7 +45,12 @@
       <div class="results" id="results"></div>
 
       <details id="manualBox">
-        <summary>직접 입력</summary>
+        <summary>직접 입력 / 영양성분표 사진 인식</summary>
+        <label class="btn ghost" style="text-align:center;flex-direction:row;justify-content:center">
+          📄 영양성분표 사진으로 채우기<input type="file" id="ocrFile" accept="image/*" class="hidden">
+        </label>
+        <p class="muted hidden" id="ocrStatus"></p>
+        <details class="hidden" id="ocrRawBox"><summary>인식된 글자 보기</summary><pre id="ocrRaw"></pre></details>
         <div class="grid" style="margin-top:10px">
           <label>음식 이름<input id="fName" placeholder="예: 엄마표 잡채"></label>
           <label>제공량<input id="fServing" placeholder="1인분"></label>
@@ -53,8 +65,6 @@
         <button class="btn" id="addManual">추가</button>
       </details>
     </div>
-
-    <div class="card" id="mealList"></div>
   </section>
 
   <!-- 인바디 -->
@@ -96,9 +106,17 @@
   <!-- 기록 -->
   <section id="tab-history" class="hidden">
     <div class="card">
-      <h2>일별 섭취 기록</h2>
-      <div id="historyTable"></div>
+      <div class="datebar" style="margin-bottom:8px">
+        <button id="prevMonth">‹</button>
+        <strong id="monthLabel"></strong>
+        <button id="nextMonth">›</button>
+      </div>
+      <div class="calendar" id="calendar"></div>
+      <p class="muted" style="margin:10px 0 0">
+        <span class="dot ok"></span> 목표 이내 &nbsp; <span class="dot over"></span> 목표 초과 · 날짜를 누르면 그날 식단으로 이동
+      </p>
     </div>
+    <div class="card" id="monthStats"></div>
     <div class="card">
       <h2>인바디 이력</h2>
       <div id="inbodyTable"></div>
@@ -130,9 +148,9 @@
 </main>
 
 <nav>
-  <button data-tab="today" class="active"><span>🍽️</span>오늘</button>
+  <button data-tab="today" class="active"><span>🍽️</span>식단</button>
   <button data-tab="inbody"><span>💪</span>인바디</button>
-  <button data-tab="history"><span>📊</span>기록</button>
+  <button data-tab="history"><span>📅</span>달력</button>
   <button data-tab="settings"><span>⚙️</span>설정</button>
 </nav>
 
@@ -152,6 +170,7 @@
     </label>
     <label class="check hidden" id="sSaveWrap"><input type="checkbox" id="sSave"> 내 음식에 저장</label>
     <button class="btn" id="sAdd">기록하기</button>
+    <button class="btn ghost" id="sEdit">✏️ 포장지 값과 달라요 (직접 고치기)</button>
   </div>
 </div>
 

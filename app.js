@@ -42,6 +42,7 @@ const toKey = (d) => {
 };
 const foodKey = (f) => `${f.src}|${f.barcode || ''}|${f.name}|${f.servingLabel}`;
 let currentDate = new Date();
+let currentMeal = '아침';   // 식단 탭에서 선택된 끼니
 
 // ---------- 계산 ----------
 function latestInbody() {
@@ -193,7 +194,7 @@ function openFoodSheet(food) {
   $('sUnit').innerHTML = `<option value="serving">${esc(food.servingLabel)}</option>`
     + (food.servingG ? `<option value="g">g (그램)</option>` : '');
   $('sAmount').value = 1;
-  $('sMeal').value = guessMeal();
+  $('sMeal').value = currentMeal;
   $('sSaveWrap').classList.toggle('hidden', food.src === 'my');
   $('sSave').checked = !!food.barcode;   // 바코드로 찾은 제품은 기본으로 저장
   updateSheetMacros();
@@ -216,6 +217,7 @@ function guessMeal() {
 
 // ---------- 기록 ----------
 function logFood(food, multiplier, meal, amountText) {
+  currentMeal = meal;
   const n = scale(food.n, multiplier);
   const key = toKey(currentDate);
   (foods[key] ||= []).push({
@@ -281,17 +283,24 @@ function renderToday() {
     : '';
 
   const list = foods[key] || [];
-  $('mealList').innerHTML = `<h2>먹은 음식</h2>` + (list.length ? MEALS.map((meal) => {
-    const items = list.filter((f) => f.meal === meal);
-    if (!items.length) return '';
-    const sum = items.reduce((s, f) => s + f.kcal, 0);
-    return `<div class="meal"><h3>${meal} · ${round(sum)} kcal</h3>` + items.map((f) => `
-      <div class="food">
-        <div>${esc(f.name)}${f.amount ? ` <small>${esc(f.amount)}</small>` : ''}<br>
-          <small>탄 ${r1(f.carb)}g · 단 ${r1(f.protein)}g · 지 ${r1(f.fat)}g</small></div>
-        <div style="white-space:nowrap">${round(f.kcal)} kcal <button data-del="${f.id}" title="삭제">×</button></div>
-      </div>`).join('') + `</div>`;
-  }).join('') : `<p class="muted">아직 기록이 없습니다.</p>`);
+  const mealKcal = (meal) => list.filter((f) => f.meal === meal).reduce((s, f) => s + f.kcal, 0);
+  $('mealTabs').innerHTML = MEALS.map((meal) => `
+    <button data-meal="${meal}" class="${meal === currentMeal ? 'on' : ''}">${meal}<small>${round(mealKcal(meal))} kcal</small></button>`).join('');
+
+  const items = list.filter((f) => f.meal === currentMeal);
+  $('mealList').innerHTML = `<h2>${currentMeal} · ${round(mealKcal(currentMeal))} kcal</h2>` + (items.length ? items.map((f) => `
+    <div class="food">
+      <div>${esc(f.name)}${f.amount ? ` <small>${esc(f.amount)}</small>` : ''}<br>
+        <small>탄 ${r1(f.carb)}g · 단 ${r1(f.protein)}g · 지 ${r1(f.fat)}g</small></div>
+      <div style="white-space:nowrap">${round(f.kcal)} kcal <button data-del="${f.id}" title="삭제">×</button></div>
+    </div>`).join('') : `<p class="muted">${currentMeal}에 먹은 음식이 없어요.</p>`);
+  $('addTitle').textContent = `${currentMeal}에 음식 추가`;
+}
+
+function goToDate(d) {
+  currentDate = d;
+  currentMeal = toKey(d) === toKey(new Date()) ? guessMeal() : '아침';
+  renderToday();
 }
 
 // ---------- 렌더: 인바디 ----------
@@ -334,18 +343,37 @@ function renderInbody() {
     ${profile.phase ? `<button class="btn ghost" id="resetPhase">추천 단계로 되돌리기</button>` : ''}`;
 }
 
-// ---------- 렌더: 기록 ----------
+// ---------- 렌더: 달력 ----------
+let calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
 function renderHistory() {
   const g = calcTargets();
-  const days = Object.keys(foods).filter((k) => foods[k].length).sort().reverse();
-  $('historyTable').innerHTML = days.length ? `
-    <table><tr><th>날짜</th><th>칼로리</th><th>단백질</th><th>목표 대비</th></tr>
-    ${days.map((k) => {
-      const t = dayTotals(k);
-      const diff = g ? round(t.kcal - g.kcal) : null;
-      return `<tr><td>${k}</td><td>${round(t.kcal)}</td><td>${round(t.protein)}g</td>
-        <td class="${diff > 0 ? 'over' : ''}">${diff === null ? '-' : (diff > 0 ? '+' : '') + diff}</td></tr>`;
-    }).join('')}</table>` : `<p class="muted">기록이 없습니다.</p>`;
+  const y = calMonth.getFullYear(), m = calMonth.getMonth();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const todayKey = toKey(new Date());
+  $('monthLabel').textContent = `${y}년 ${m + 1}월`;
+
+  const cells = ['일', '월', '화', '수', '목', '금', '토'].map((d) => `<div class="dow">${d}</div>`);
+  for (let i = 0; i < calMonth.getDay(); i++) cells.push(`<div class="day empty"></div>`);
+  const logged = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = toKey(new Date(y, m, d));
+    const has = (foods[key] || []).length > 0;
+    const kcal = has ? dayTotals(key).kcal : 0;
+    if (has) logged.push(kcal);
+    const state = has && g ? (kcal > g.kcal ? 'over' : 'ok') : '';
+    cells.push(`<button class="day ${state} ${key === todayKey ? 'today' : ''}" data-day="${key}">
+      ${d}<small>${has ? round(kcal) : ''}</small></button>`);
+  }
+  $('calendar').innerHTML = cells.join('');
+
+  const avg = logged.length ? logged.reduce((a, b) => a + b, 0) / logged.length : 0;
+  const okDays = g ? logged.filter((k) => k <= g.kcal).length : null;
+  $('monthStats').innerHTML = `
+    <h2>${m + 1}월 요약</h2>
+    <div class="stat-row"><span>기록한 날</span><b>${logged.length}일</b></div>
+    <div class="stat-row"><span>하루 평균 섭취</span><b>${round(avg)} kcal</b></div>
+    ${g ? `<div class="stat-row"><span>목표 이내로 먹은 날</span><b>${okDays}일 / ${logged.length}일</b></div>` : ''}`;
 
   const ibs = [...inbody].sort((a, b) => b.date.localeCompare(a.date));
   $('inbodyTable').innerHTML = ibs.length ? `
@@ -367,11 +395,11 @@ function renderSettings() {
 // ---------- 바코드 스캐너 ----------
 let scanner = null;
 
-function loadScript(src) {
+function loadScript(src, globalName = 'Html5Qrcode') {
   return new Promise((resolve, reject) => {
-    if (window.Html5Qrcode) return resolve();
+    if (window[globalName]) return resolve();
     const s = document.createElement('script');
-    s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('스캐너를 불러오지 못했어요 (인터넷 연결 확인)'));
+    s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('기능을 불러오지 못했어요 (인터넷 연결 확인)'));
     document.head.appendChild(s);
   });
 }
@@ -428,7 +456,7 @@ async function handleBarcode(code) {
       openFoodSheet(food);
     } else {
       // 등록되지 않은 제품 → 영양성분표 보고 직접 입력, 바코드와 함께 저장
-      alert(`바코드 ${code} 제품 정보를 찾지 못했어요.\n포장지의 영양정보를 보고 직접 입력하면 다음부터는 바로 불러와요.`);
+      alert(`바코드 ${code} 제품 정보를 찾지 못했어요.\n"영양성분표 사진으로 채우기"로 찍거나 직접 입력하면, 다음부터는 바코드만 찍어도 바로 불러와요.`);
       $('manualBox').open = true;
       $('fBarcode').value = code;
       $('fBarcodeNote').textContent = `바코드 ${code} 와 함께 저장됩니다.`;
@@ -443,17 +471,169 @@ async function handleBarcode(code) {
   }
 }
 
+// ---------- 영양성분표 OCR (Tesseract.js, 무료 · 폰에서 직접 인식) ----------
+const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+let ocrWorker = null;
+
+function getOcrWorker(onProgress) {
+  ocrWorker ||= loadScript(TESSERACT_URL, 'Tesseract').then(() =>
+    // 한글 인식 데이터는 처음 한 번만 받고, 이후엔 폰에 저장된 것을 사용
+    Tesseract.createWorker(['kor', 'eng'], 1, { logger: (m) => onProgress?.(m) }))
+;
+  return ocrWorker.catch((e) => { ocrWorker = null; throw e; });
+}
+
+// 사진을 키우고 흑백 + 대비 강화해서 인식률을 높임
+async function prepareImage(file) {
+  const img = await createImageBitmap(file);
+  const scale = Math.min(2400 / Math.max(img.width, img.height), Math.max(1, 1600 / img.width));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * scale);
+  c.height = Math.round(img.height * scale);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  const px = ctx.getImageData(0, 0, c.width, c.height);
+  const d = px.data;
+  let min = 255, max = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    d[i] = g;
+    if (g < min) min = g;
+    if (g > max) max = g;
+  }
+  const range = Math.max(1, max - min);
+  for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = ((d[i] - min) / range) * 255;
+  ctx.putImageData(px, 0, 0);
+  return c;
+}
+
+// OCR 글자에서 열량·탄단지·제공량 찾기
+function parseNutrition(raw) {
+  let t = raw
+    .replace(/(\d),(\d{3})/g, '$1$2')               // 1,790 → 1790
+    .replace(/\b[Oo](?=\s*(?:m?g|kcal)\b)/g, '0')    // "Og" → "0g"
+    .replace(/[：:]/g, ' ');
+  // 글자 사이에 공백이 끼어도 찾도록 (예: "탄 수 화 물"), 비슷하게 읽히는 글자도 허용
+  const word = (w) => [...w].map((c) => ({ 량: '[량랑]', 화: '[화와]', 질: '[질절]' }[c] || c)).join('\\s*');
+  // OCR이 단위 "g"를 숫자 "9"로 자주 읽음 ("79g" → "799"). 표의 숫자엔 항상 단위가 붙으므로 끝의 9를 g로 봄
+  const NUM = '(\\d+(?:\\.\\d+)?)\\s*(mg|g|ml)?';
+  const value = (n, unit) => {
+    const decimals = n.split('.')[1] || '';
+    if (!unit && n.length > 1 && n.endsWith('9') && (!decimals || decimals.length >= 2)) return Number(n.slice(0, -1));
+    return unit?.toLowerCase() === 'mg' ? Number(n) / 1000 : Number(n);
+  };
+  const find = (label) => t.match(new RegExp(`${word(label)}\\s*${NUM}`, 'i'));
+  const amount = (label) => {
+    const m = find(label);
+    return m ? value(m[1], m[2]) : null;
+  };
+
+  const kcalM = t.match(/(\d+(?:\.\d+)?)\s*k\s*c\s*a\s*l/i) || t.match(new RegExp(`${word('열량')}\\s*(\\d+(?:\\.\\d+)?)`));
+  const carb = amount('탄수화물');
+  const protein = amount('단백질');
+  // "지방" 앞에 포화/트랜스가 붙은 줄은 빼고 찾기
+  t = t.replace(new RegExp(`(${word('포화')}|${word('트랜스')})\\s*${word('지방')}\\s*[\\d.]*\\s*(mg|g)?`, 'g'), '');
+  const fat = amount('지방');
+
+  const per = t.match(/(\d+(?:\.\d+)?)[ \t]*(g|ml)[ \t]*당(?!류)/i);
+  const size = (label) => {
+    const m = find(label);
+    return m ? `${value(m[1], m[2])}${(m[2] || 'g').toLowerCase()}` : '';
+  };
+  const once = size('1회제공량'), total = size('총내용량');
+  const serving = per ? `${per[1]}${per[2]}당` : once ? `1회 ${once}` : total ? `총 ${total}` : '';
+
+  return { kcal: kcalM ? Number(kcalM[1]) : null, carb, protein, fat, serving };
+}
+
+// "79g"를 "799g"로 읽는 경우처럼 g가 9로 붙은 값은, 열량(탄4·단4·지9 kcal/g)과 더 잘 맞는 쪽으로 고침
+function fixWithKcal(r) {
+  if (r.kcal == null) return r;
+  const KCAL = { carb: 4, protein: 4, fat: 9 };
+  const err = (x) => Math.abs(Object.keys(KCAL).reduce((s, k) => s + (x[k] || 0) * KCAL[k], 0) - x.kcal);
+  for (const k of Object.keys(KCAL)) {
+    const v = r[k];
+    if (v == null || !/\d9$/.test(String(v))) continue;
+    const alt = { ...r, [k]: Number(String(v).slice(0, -1)) };
+    if (err(alt) < err(r)) r = alt;
+  }
+  return r;
+}
+
+async function runOcr(file) {
+  const status = $('ocrStatus');
+  status.classList.remove('hidden');
+  status.textContent = '사진 준비 중…';
+  try {
+    const worker = await getOcrWorker((m) => {
+      if (m.status === 'recognizing text') status.textContent = `글자 읽는 중… ${Math.round(m.progress * 100)}%`;
+      else if (/load|initializ/.test(m.status)) status.textContent = '인식 엔진 준비 중… (처음 한 번은 몇 초 더 걸려요)';
+    });
+    const image = await prepareImage(file);
+    // 표 모양에 따라 잘 맞는 읽기 방식이 달라서, 줄 단위(4) → 한 덩어리(6) → 흩어진 글자(11) 순으로 시도하며 빈 항목만 채움
+    let r = { kcal: null, carb: null, protein: null, fat: null, serving: '' };
+    const texts = [];
+    for (const psm of ['4', '6', '11']) {
+      await worker.setParameters({ tessedit_pageseg_mode: psm });
+      const { data } = await worker.recognize(image);
+      texts.push(data.text.trim());
+      const found = parseNutrition(data.text);
+      for (const k of Object.keys(r)) if (r[k] == null || r[k] === '') r[k] = found[k];
+      if (['kcal', 'carb', 'protein', 'fat'].every((k) => r[k] != null)) break;
+      status.textContent = '조금 더 꼼꼼히 읽는 중…';
+    }
+    r = fixWithKcal(r);
+    $('ocrRaw').textContent = texts[0] || '(읽은 글자가 없어요)';
+    $('ocrRawBox').classList.remove('hidden');
+
+    const fields = { fKcal: ['열량', r.kcal], fCarb: ['탄수화물', r.carb], fProtein: ['단백질', r.protein], fFat: ['지방', r.fat] };
+    const missing = [];
+    for (const [id, [label, v]] of Object.entries(fields)) {
+      if (v == null) missing.push(label);
+      else $(id).value = v;
+    }
+    if (r.serving) $('fServing').value = r.serving;
+    status.textContent = missing.length === 4
+      ? '영양성분을 찾지 못했어요. 표만 크게, 밝은 곳에서 반사 없이 다시 찍어보세요.'
+      : `채웠어요! 숫자가 맞는지 확인해 주세요.${missing.length ? ` 못 읽은 항목: ${missing.join(', ')}` : ''}`;
+    if (!$('fName').value) $('fName').focus();
+  } catch (e) {
+    status.textContent = `인식 실패: ${e.message || e}`;
+  }
+}
+
 // ---------- 이벤트 ----------
 const renderers = { today: renderToday, inbody: renderInbody, history: renderHistory, settings: renderSettings };
-document.querySelectorAll('nav button').forEach((btn) => btn.addEventListener('click', () => {
-  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b === btn));
-  document.querySelectorAll('main > section').forEach((s) => s.classList.toggle('hidden', s.id !== 'tab-' + btn.dataset.tab));
-  renderers[btn.dataset.tab]();
+function showTab(tab) {
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('main > section').forEach((s) => s.classList.toggle('hidden', s.id !== 'tab-' + tab));
+  renderers[tab]();
   window.scrollTo(0, 0);
-}));
+}
+document.querySelectorAll('nav button').forEach((btn) => btn.addEventListener('click', () => showTab(btn.dataset.tab)));
 
-$('prevDay').onclick = () => { currentDate.setDate(currentDate.getDate() - 1); renderToday(); };
-$('nextDay').onclick = () => { currentDate.setDate(currentDate.getDate() + 1); renderToday(); };
+const shiftDay = (n) => goToDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + n));
+$('prevDay').onclick = () => shiftDay(-1);
+$('nextDay').onclick = () => shiftDay(1);
+$('datePicker').onchange = (e) => {
+  if (!e.target.value) return;
+  const [y, m, d] = e.target.value.split('-').map(Number);
+  goToDate(new Date(y, m - 1, d));
+};
+$('mealTabs').onclick = (e) => {
+  const b = e.target.closest('[data-meal]');
+  if (b) { currentMeal = b.dataset.meal; renderToday(); }
+};
+
+$('prevMonth').onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); renderHistory(); };
+$('nextMonth').onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); renderHistory(); };
+$('calendar').onclick = (e) => {
+  const b = e.target.closest('[data-day]');
+  if (!b) return;
+  const [y, m, d] = b.dataset.day.split('-').map(Number);
+  goToDate(new Date(y, m - 1, d));
+  showTab('today');
+};
 
 // 검색: 내장 DB는 입력 즉시, 온라인은 입력이 멈춘 뒤 실행
 let searchTimer;
@@ -494,6 +674,24 @@ $('sAdd').onclick = () => {
   renderResults();
 };
 
+// 바코드DB 값이 포장지와 다를 때: 값을 직접 입력 칸으로 옮겨 고친 뒤 '내 음식'으로 저장 → 다음 스캔부터 고친 값 사용
+$('sEdit').onclick = () => {
+  const f = sheetFood;
+  $('foodSheet').classList.add('hidden');
+  $('fName').value = f.name;
+  $('fServing').value = f.servingLabel;
+  $('fKcal').value = r1(f.n.kcal);
+  $('fCarb').value = r1(f.n.carb);
+  $('fProtein').value = r1(f.n.protein);
+  $('fFat').value = r1(f.n.fat);
+  $('fBarcode').value = f.barcode || '';
+  $('fBarcodeNote').textContent = f.barcode ? `바코드 ${f.barcode} 와 함께 저장돼서, 다음 스캔부터 고친 값이 나와요.` : '';
+  $('fBarcodeNote').classList.toggle('hidden', !f.barcode);
+  $('fSave').checked = true;
+  $('manualBox').open = true;
+  $('manualBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
 $('addManual').onclick = () => {
   const name = $('fName').value.trim();
   const kcal = num($('fKcal').value);
@@ -504,9 +702,9 @@ $('addManual').onclick = () => {
     n: { kcal, carb: num($('fCarb').value), protein: num($('fProtein').value), fat: num($('fFat').value) },
   };
   if ($('fSave').checked) food = saveMyFood(food);
-  logFood(food, 1, guessMeal(), food.servingLabel);
+  logFood(food, 1, currentMeal, food.servingLabel);
   ['fName', 'fServing', 'fKcal', 'fCarb', 'fProtein', 'fFat', 'fBarcode'].forEach((id) => ($(id).value = ''));
-  $('fBarcodeNote').classList.add('hidden');
+  ['fBarcodeNote', 'ocrStatus', 'ocrRawBox'].forEach((id) => $(id).classList.add('hidden'));
   $('manualBox').open = false;
 };
 
@@ -520,6 +718,11 @@ $('mealList').onclick = (e) => {
 };
 
 $('scanBtn').onclick = openScanner;
+$('ocrFile').onchange = (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (file) runOcr(file);
+};
 $('barcodeGo').onclick = () => handleBarcode($('barcodeInput').value);
 $('scanFile').onchange = async (e) => {
   const file = e.target.files[0];
@@ -605,4 +808,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-renderToday();
+goToDate(new Date());

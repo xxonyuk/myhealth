@@ -94,3 +94,36 @@ td, th { padding: 8px 4px; text-align: left; border-bottom: 1px solid var(--line
 .macro-grid b { display: block; font-size: 17px; }
 .macro-grid small { color: var(--muted); font-size: 11px; }
 #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; min-height: 200px; }
+
+/* 날짜 선택 (라벨을 누르면 기본 달력이 열림) */
+.date-pick { position: relative; flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 15px; cursor: pointer; }
+.date-pick input { position: absolute; inset: 0; opacity: 0; width: 100%; }
+
+/* 끼니 탭 */
+.meal-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px; }
+.meal-tabs button {
+  border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 10px 2px;
+  font-size: 14px; cursor: pointer; color: var(--text); line-height: 1.3;
+}
+.meal-tabs button small { display: block; color: var(--muted); font-size: 11px; }
+.meal-tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.meal-tabs button.on small { color: #dbeafe; }
+
+/* 월 달력 */
+.calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.calendar .dow { text-align: center; font-size: 12px; color: var(--muted); padding: 4px 0; }
+.calendar .dow:first-child { color: var(--cut); }
+.calendar .day {
+  border: 0; background: var(--bg); border-radius: 10px; min-height: 54px; padding: 4px 2px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font-size: 13px; color: var(--text);
+}
+.calendar .day.empty { background: none; cursor: default; }
+.calendar .day.today { outline: 2px solid var(--accent); }
+.calendar .day small { font-size: 10px; color: var(--muted); }
+.calendar .day.ok small { color: var(--lean); font-weight: 700; }
+.calendar .day.over small { color: var(--cut); font-weight: 700; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.dot.ok { background: var(--lean); }
+.dot.over { background: var(--cut); }
+
+pre { white-space: pre-wrap; font-size: 12px; background: var(--bg); padding: 8px; border-radius: 8px; max-height: 200px; overflow-y: auto; }

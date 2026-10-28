@@ -1,10 +1,4 @@
 // ---------- 상수 ----------
-const PHASES = {
-  cut:  { name: '다이어트', color: 'var(--cut)',  kcalMul: 0.80, proteinPerKg: 2.2, desc: '체지방 감량. 근손실을 막기 위해 단백질을 높게 유지합니다.' },
-  lean: { name: '린매스업', color: 'var(--lean)', kcalMul: 1.07, proteinPerKg: 2.0, desc: '지방은 최소로, 근육은 천천히. 소폭 잉여 칼로리.' },
-  bulk: { name: '벌크업',   color: 'var(--bulk)', kcalMul: 1.15, proteinPerKg: 1.8, desc: '근육량 증가에 집중. 충분한 잉여 칼로리.' },
-};
-const FAT_RATIO = 0.25;
 const MEALS = ['아침', '점심', '저녁', '간식'];
 const SRC_LABEL = { db: '기본', my: '내 음식', mfds: '식약처', off: '바코드DB' };  // off = Open Food Facts
 const SCANNER_URL = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
@@ -20,7 +14,8 @@ const store = {
   },
 };
 
-let profile = store.get('profile', { sex: 'M', age: '', height: '', activity: '1.375', phase: null });
+let profile = { sex: 'M', age: '', height: '', freq: '3-4', exercise: '', steps: '', meals: '3', period: '3', phase: null, targetKcal: null, foodPrefs: {},
+  ...store.get('profile', {}) };
 let inbody  = store.get('inbody', []);   // [{date, weight, smm, bodyFat, bmr}]
 let foods   = store.get('foods', {});    // {'YYYY-MM-DD': [{id, meal, name, amount, kcal, carb, protein, fat}]}
 let myFoods = store.get('myFoods', []);  // [음식 객체 + barcode?]
@@ -49,29 +44,8 @@ function latestInbody() {
   return [...inbody].sort((a, b) => a.date.localeCompare(b.date)).at(-1) || null;
 }
 
-function recommendPhase(sex, bodyFat) {
-  const [high, low] = sex === 'F' ? [28, 20] : [20, 12];
-  if (bodyFat > high) return 'cut';
-  if (bodyFat < low) return 'bulk';
-  return 'lean';
-}
-
 function calcTargets() {
-  const ib = latestInbody();
-  if (!ib) return null;
-  const lbm = ib.weight * (1 - ib.bodyFat / 100);
-  const bmr = ib.bmr || (370 + 21.6 * lbm);   // Katch-McArdle
-  const tdee = bmr * num(profile.activity);
-  const recommended = recommendPhase(profile.sex, ib.bodyFat);
-  const phase = profile.phase || recommended;
-  const p = PHASES[phase];
-
-  const kcal = tdee * p.kcalMul;
-  const protein = ib.weight * p.proteinPerKg;
-  const fat = (kcal * FAT_RATIO) / 9;
-  const carb = Math.max(0, (kcal - protein * 4 - fat * 9) / 4);
-
-  return { ib, lbm, bmr, tdee, recommended, phase, kcal, protein, fat, carb };
+  return calcPlan(profile, latestInbody());
 }
 
 function dayTotals(key) {
@@ -275,7 +249,7 @@ function renderToday() {
     </div>` : `
     <div class="muted">섭취 칼로리</div>
     <div class="big">${round(t.kcal)} kcal</div>
-    <p class="muted">인바디 탭에서 정보를 입력하면 목표 칼로리와 탄단지가 계산됩니다.</p>`;
+    <p class="muted">목표 탭에서 인바디와 내 정보를 입력하면 목표 칼로리와 탄단지가 계산됩니다.</p>`;
 
   $('recentChips').innerHTML = recent.length
     ? `<span class="muted" style="width:100%">최근 먹은 음식</span>`
@@ -305,42 +279,235 @@ function goToDate(d) {
 
 // ---------- 렌더: 인바디 ----------
 function renderInbody() {
+  $('pFreq').innerHTML = FREQS.map((f) => `<option value="${f.v}">${f.label}</option>`).join('');
   $('pSex').value = profile.sex;
   $('pAge').value = profile.age;
   $('pHeight').value = profile.height;
-  $('pActivity').value = profile.activity;
+  $('pFreq').value = profile.freq;
+  $('pExercise').value = profile.exercise;
+  $('pSteps').value = profile.steps;
+  $('pMeals').value = profile.meals;
+  $('pPeriod').value = profile.period;
+  renderFoodPrefs();
 
   const ib = latestInbody();
   $('iDate').value = toKey(new Date());
   if (ib) {
     $('iWeight').value = ib.weight;
-    $('iSmm').value = ib.smm;
+    $('iSmm').value = ib.smm || '';
     $('iFat').value = ib.bodyFat;
     $('iBmr').value = ib.bmr || '';
   }
+  renderAnalysis();
+}
 
+function renderFoodPrefs() {
+  const prefs = profile.foodPrefs || {};
+  $('foodPrefs').innerHTML = ['carb', 'protein', 'fat', 'veg'].map((cat) =>
+    `<span class="muted" style="width:100%;margin-top:4px">${CAT_NAME[cat]}</span>`
+    + PLAN_FOODS.filter((f) => f.cat === cat).map((f) => {
+      const st = prefs[f.key];
+      return `<button data-pref="${f.key}" class="pref-${st || 'none'}">${st === 'like' ? '❤️ ' : st === 'no' ? '🚫 ' : ''}${f.name}</button>`;
+    }).join('')).join('');
+}
+
+const fmt = (v, d = 0) => Number(v).toLocaleString('ko-KR', { maximumFractionDigits: d, minimumFractionDigits: d });
+
+function renderAnalysis() {
   const g = calcTargets();
+  ['mealPlan', 'planExtras'].forEach((id) => $(id).classList.toggle('hidden', !g));
   if (!g) {
-    $('analysis').innerHTML = `<h2>분석 결과</h2><p class="muted">인바디 값을 입력하고 저장하세요.</p>`;
+    $('analysis').innerHTML = `<h2>분석 결과</h2><p class="muted">인바디(체중·체지방률)와 나이·키를 입력하고 저장하세요.</p>`;
     return;
   }
   const p = PHASES[g.phase];
+  const freq = FREQS.find((f) => f.v === profile.freq) || FREQS[2];
+  const maintain = g.tdee, cutK = Math.max(g.bmr.value, g.tdee * PHASES.cut.kcalMul), gainK = g.tdee * PHASES.bulk.kcalMul;
+
   $('analysis').innerHTML = `
-    <h2>분석 결과</h2>
-    <p class="muted">체지방률 기준 추천: <b style="color:${PHASES[g.recommended].color}">${PHASES[g.recommended].name}</b></p>
+    <h2>목표 포지션</h2>
+    <p class="muted" style="margin-top:0">체지방률 ${g.ib.bodyFat}% 기준 추천: <b style="color:${PHASES[g.recommended].color}">${PHASES[g.recommended].name}</b></p>
     <div class="phase-pick">
       ${Object.entries(PHASES).map(([k, v]) =>
         `<button data-p="${k}" class="${g.phase === k ? 'on' : ''}">${v.name}${g.recommended === k ? ' ⭐' : ''}</button>`).join('')}
     </div>
-    <p class="muted" style="margin:10px 0">${p.desc}</p>
-    <div class="stat-row"><span>제지방량</span><b>${g.lbm.toFixed(1)} kg</b></div>
-    <div class="stat-row"><span>기초대사량 ${g.ib.bmr ? '(인바디)' : '(계산)'}</span><b>${round(g.bmr)} kcal</b></div>
-    <div class="stat-row"><span>하루 소비 칼로리 (TDEE)</span><b>${round(g.tdee)} kcal</b></div>
-    <div class="stat-row"><span>목표 칼로리</span><b style="color:${p.color}">${round(g.kcal)} kcal</b></div>
-    <div class="stat-row"><span>탄수화물</span><b>${round(g.carb)} g</b></div>
-    <div class="stat-row"><span>단백질</span><b>${round(g.protein)} g</b></div>
-    <div class="stat-row"><span>지방</span><b>${round(g.fat)} g</b></div>
-    ${profile.phase ? `<button class="btn ghost" id="resetPhase">추천 단계로 되돌리기</button>` : ''}`;
+    ${profile.phase ? `<button class="btn ghost" id="resetPhase">추천 포지션으로 되돌리기</button>` : ''}
+
+    <h3 class="step">1. 기초대사량 (BMR) — 해리스-베네딕트</h3>
+    <div class="formula">${profile.sex === 'F' ? '여성' : '남성'}: ${g.bmr.formula}<br>= <b>${fmt(g.bmr.value)} kcal</b></div>
+    ${g.inbodyBmr ? `<p class="muted">참고: 인바디 측정 기초대사량 ${fmt(g.inbodyBmr)} kcal (근육량이 반영된 값)</p>` : ''}
+
+    <h3 class="step">2. 유지 칼로리 (TDEE)</h3>
+    <div class="formula">활동계수: ${freq.label} → ${g.act.base} (${freq.note})${g.act.bonus ? `<br>+ 걸음 수 ${fmt(num(profile.steps))}보 보정 +${g.act.bonus}` : ''}<br>
+      ${fmt(g.bmr.value)} × ${g.act.factor.toFixed(3).replace(/0+$/, '')} = <b>${fmt(g.tdee)} kcal</b></div>
+    <p class="muted">활동계수: 1.2 거의 안 움직임 · 1.375 주 1~2회 · 1.55 주 3~4회 · 1.725 주 5~6회 · 1.9 매일 고강도. 하루 8천보 이상이면 +0.05, 1만2천보 이상이면 +0.1</p>
+
+    <h3 class="step">3. 하루 권장 칼로리</h3>
+    <div class="stat-row"><span>유지 칼로리</span><b>${fmt(maintain)} kcal</b></div>
+    <div class="stat-row"><span>감량 칼로리 (−20%)</span><b>${fmt(cutK)} kcal</b></div>
+    <div class="stat-row"><span>린매스업 칼로리 (+7%)</span><b>${fmt(g.tdee * PHASES.lean.kcalMul)} kcal</b></div>
+    <div class="stat-row"><span>증량 칼로리 (+15%)</span><b>${fmt(gainK)} kcal</b></div>
+    <div class="target-box" style="border-color:${p.color}">
+      <div class="muted">${p.name} 목표 칼로리</div>
+      <div class="big" style="color:${p.color}">${fmt(g.kcal)} kcal</div>
+      <p class="muted" style="margin:6px 0 0">${p.reason}</p>
+      ${g.notes.map((n) => `<p class="muted" style="margin:4px 0 0">※ ${n}</p>`).join('')}
+    </div>
+    <div class="row" style="margin-top:10px">
+      <input id="manualKcal" type="number" inputmode="numeric" placeholder="목표 열량 직접 입력 (kcal)" value="${profile.targetKcal || ''}">
+      <button class="btn small" id="applyKcal">적용</button>
+      ${profile.targetKcal ? `<button class="btn small ghost" id="clearKcal">자동</button>` : ''}
+    </div>
+
+    <h3 class="step">4. 하루 권장 영양소</h3>
+    <table>
+      <tr><th>영양소</th><th>양</th><th>칼로리</th><th>비율</th></tr>
+      <tr><td>단백질</td><td>${fmt(g.protein)} g</td><td>${fmt(g.protein * 4)}</td><td>${fmt(g.pct.protein)}%</td></tr>
+      <tr><td>탄수화물</td><td>${fmt(g.carb)} g</td><td>${fmt(g.carb * 4)}</td><td>${fmt(g.pct.carb)}%</td></tr>
+      <tr><td>지방</td><td>${fmt(g.fat)} g</td><td>${fmt(g.fat * 9)}</td><td>${fmt(g.pct.fat)}%</td></tr>
+    </table>
+    <p class="muted">단백질 체중 1kg당 ${fmt(g.protein / g.weight, 1)}g · 지방 총 칼로리의 25% 이상 · 나머지를 탄수화물로</p>`;
+
+  renderMealPlan(g);
+}
+
+function renderMealPlan(g) {
+  const plan = buildMealPlan(g, profile);
+  const row = (name, g_, n, unit) => `<tr><td>${name}</td><td>${g_}</td><td>${fmt(n.kcal)}</td><td>${fmt(n.carb, 1)}</td><td>${fmt(n.protein, 1)}</td><td>${fmt(n.fat, 1)}</td></tr>`;
+  const amount = (it) => it.food.unit ? `${it.g}g (${it.g / it.food.unit}${it.food.unitName})` : `${it.g}g`;
+
+  $('mealPlan').innerHTML = `
+    <h2>5~7. 추천 하루 식단</h2>
+    <p class="muted" style="margin-top:0">${profile.meals}끼 기준 · 밥은 지은 밥 중량, 나머지는 손질한 생 중량 · 값은 대략적인 계산</p>
+    <div class="table-wrap"><table class="plan">
+      <tr><th>음식</th><th>중량</th><th>kcal</th><th>탄</th><th>단</th><th>지</th></tr>
+      ${plan.meals.map((m) => `
+        <tr class="meal-head"><td colspan="6">${m.name} · ${fmt(m.total.kcal)} kcal</td></tr>
+        ${m.items.map((it) => row(it.food.name, amount(it), it.n)).join('')}`).join('')}
+      <tr class="total">${['합계', '', plan.total.kcal, plan.total.carb, plan.total.protein, plan.total.fat]
+        .map((v, i) => `<td>${i < 2 ? v : fmt(v, i === 2 ? 0 : 1)}</td>`).join('')}</tr>
+      <tr class="muted-row"><td>목표</td><td></td><td>${fmt(g.kcal)}</td><td>${fmt(g.carb)}</td><td>${fmt(g.protein)}</td><td>${fmt(g.fat)}</td></tr>
+    </table></div>
+    <button class="btn ghost" id="logPlan">오늘 식단에 이대로 기록하기</button>`;
+  $('logPlan').onclick = () => {
+    if (!confirm('추천 식단을 오늘 날짜 끼니별로 기록할까요?')) return;
+    const key = toKey(new Date());
+    plan.meals.forEach((m) => {
+      const meal = MEALS.includes(m.name) ? m.name : '점심';
+      m.items.forEach((it) => (foods[key] ||= []).push({
+        id: Date.now() + Math.random(), meal, name: it.food.name, amount: amount(it),
+        kcal: r1(it.n.kcal), carb: r1(it.n.carb), protein: r1(it.n.protein), fat: r1(it.n.fat),
+      }));
+    });
+    store.set('foods', foods);
+    alert('기록했어요. 식단 탭에서 확인하세요.');
+  };
+
+  renderPlanExtras(g, plan);
+}
+
+function renderPlanExtras(g, plan) {
+  const shop = shoppingList(plan);
+  const ev = evaluatePlan(g, profile);
+  const li = (arr) => `<ul>${arr.map((t) => `<li>${t}</li>`).join('')}</ul>`;
+  $('planExtras').innerHTML = `
+    <h2>8. 운동 전후 식사</h2>
+    <h3 class="step">운동 전</h3>${li(WORKOUT_MEALS.pre)}
+    <h3 class="step">운동 후</h3>${li(WORKOUT_MEALS.post)}
+
+    <h2 style="margin-top:20px">9. 편의점 대체 식단</h2>
+    <div class="table-wrap"><table class="plan">
+      <tr><th>제품</th><th>양</th><th>kcal</th><th>탄</th><th>단</th><th>지</th><th>대체</th></tr>
+      ${CONVENIENCE.map((c) => `<tr><td>${c.name}</td><td>${c.size}</td><td>${c.kcal}</td><td>${c.c}</td><td>${c.p}</td><td>${c.f}</td><td>${c.swap}</td></tr>`).join('')}
+    </table></div>
+    <p class="muted">예: 점심 = 햇반 210g + 편의점 닭가슴살 1팩 + 구운계란 2개 + 샐러드</p>
+
+    <h2 style="margin-top:20px">10. 장보기 리스트 (1주일)</h2>
+    ${['carb', 'protein', 'fat', 'veg', 'snack'].filter((c) => shop[c]).map((c) => `
+      <h3 class="step">${CAT_NAME[c]}</h3>
+      ${li(shop[c].map(({ food, week }) => `${food.name} ${food.unit ? `${Math.ceil(week / food.unit)}${food.unitName}` : week >= 1000 ? `${(week / 1000).toFixed(1)}kg` : `${week}g`}`))}`).join('')}
+
+    <h2 style="margin-top:20px">11. 식단 평가</h2>
+    <div class="stat-row"><span>실천 가능성</span><span style="text-align:right">${ev.feasible}</span></div>
+    <div class="stat-row"><span>예상 변화 속도</span><span style="text-align:right">${ev.speed}</span></div>
+    <div class="stat-row"><span>근손실 위험</span><span style="text-align:right">${ev.muscleRisk}</span></div>
+    <div class="stat-row"><span>배고픔 정도</span><span style="text-align:right">${ev.hunger}</span></div>
+    <h3 class="step">더 좋아지려면</h3>${li(ev.tips)}`;
+}
+
+// ---------- 인바디 결과지 OCR ----------
+function parseInbody(raw) {
+  const t = raw.replace(/(\d),(\d)/g, '$1.$2').replace(/[：:]/g, ' ');
+  const word = (w) => [...w].join('\\s*');
+  // 라벨 뒤 25글자 안의 첫 숫자 중 범위에 맞는 값
+  const pick = (labels, min, max) => {
+    for (const label of labels) {
+      const re = new RegExp(`${/[가-힣]/.test(label) ? word(label) : label}[^\\d\\n]{0,25}?(\\d{1,4}(?:\\.\\d)?)`, 'gi');
+      for (const m of t.matchAll(re)) {
+        const v = Number(m[1]);
+        if (v >= min && v <= max) return v;
+      }
+    }
+    return null;
+  };
+  const r = {
+    weight: pick(['체중', 'Weight'], 30, 200),
+    smm: pick(['골격근량', 'SMM', 'Skeletal Muscle Mass'], 10, 70),
+    bodyFat: pick(['체지방률', 'PBF', 'Percent Body Fat'], 3, 60),
+    bmr: pick(['기초대사량', 'BMR', 'Basal Metabolic Rate'], 800, 3500),
+    height: pick(['신장', '키', 'Height'], 120, 220),
+    age: pick(['나이', '연령', 'Age'], 10, 100),
+  };
+  // 체지방률이 없으면 체지방량 ÷ 체중으로 계산
+  if (r.bodyFat == null && r.weight) {
+    const fatMass = pick(['체지방량', 'Body Fat Mass'], 2, 100);
+    if (fatMass) r.bodyFat = Math.round((fatMass / r.weight) * 1000) / 10;
+  }
+  // "175cm"를 "17507"처럼 단위까지 숫자로 읽는 경우: 신장 뒤 앞자리 3개만 사용
+  if (r.height == null) {
+    const m = t.match(new RegExp(`(?:${word('신장')}|Height)[^\\d\\n]{0,10}(1\\d{2})`, 'i'));
+    if (m) r.height = Number(m[1]);
+  }
+  if (/여\s*성|Female/i.test(t)) r.sex = 'F';
+  else if (/남\s*성|Male/i.test(t)) r.sex = 'M';
+  return r;
+}
+
+async function runInbodyOcr(file) {
+  const status = $('ibOcrStatus');
+  status.classList.remove('hidden');
+  status.textContent = '사진 준비 중…';
+  try {
+    const worker = await getOcrWorker((m) => {
+      if (m.status === 'recognizing text') status.textContent = `글자 읽는 중… ${Math.round(m.progress * 100)}%`;
+      else if (/load|initializ/.test(m.status)) status.textContent = '인식 엔진 준비 중… (처음 한 번은 몇 초 더 걸려요)';
+    });
+    const image = await prepareImage(file);
+    const keys = ['weight', 'smm', 'bodyFat', 'bmr', 'height', 'age', 'sex'];
+    const r = {};
+    const texts = [];
+    for (const psm of ['4', '6', '11']) {
+      await worker.setParameters({ tessedit_pageseg_mode: psm });
+      const { data } = await worker.recognize(image);
+      texts.push(data.text.trim());
+      const found = parseInbody(data.text);
+      keys.forEach((k) => { if (r[k] == null) r[k] = found[k]; });
+      if (['weight', 'smm', 'bodyFat', 'bmr'].every((k) => r[k] != null)) break;
+      status.textContent = '조금 더 꼼꼼히 읽는 중…';
+    }
+    $('ibOcrRaw').textContent = texts[0] || '(읽은 글자가 없어요)';
+    $('ibOcrRawBox').classList.remove('hidden');
+
+    const fill = { iWeight: r.weight, iSmm: r.smm, iFat: r.bodyFat, iBmr: r.bmr, pHeight: r.height, pAge: r.age, pSex: r.sex };
+    Object.entries(fill).forEach(([id, v]) => { if (v != null) $(id).value = v; });
+    const labels = { weight: '체중', smm: '골격근량', bodyFat: '체지방률', bmr: '기초대사량' };
+    const missing = Object.keys(labels).filter((k) => r[k] == null).map((k) => labels[k]);
+    status.textContent = missing.length === 4
+      ? '값을 찾지 못했어요. 결과지 전체가 나오게, 밝은 곳에서 그림자 없이 다시 찍어보세요.'
+      : `채웠어요! 숫자를 확인하고 "저장 & 분석"을 누르세요.${missing.length ? ` 못 읽은 항목: ${missing.join(', ')}` : ''}`;
+  } catch (e) {
+    status.textContent = `인식 실패: ${e.message || e}`;
+  }
 }
 
 // ---------- 렌더: 달력 ----------
@@ -745,22 +912,50 @@ document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => {
 }));
 
 $('saveInbody').onclick = () => {
-  profile = { ...profile, sex: $('pSex').value, age: $('pAge').value, height: $('pHeight').value, activity: $('pActivity').value };
+  profile = {
+    ...profile, sex: $('pSex').value, age: $('pAge').value, height: $('pHeight').value, freq: $('pFreq').value,
+    exercise: $('pExercise').value.trim(), steps: $('pSteps').value, meals: $('pMeals').value, period: $('pPeriod').value,
+  };
   store.set('profile', profile);
 
   const entry = { date: $('iDate').value, weight: num($('iWeight').value), smm: num($('iSmm').value), bodyFat: num($('iFat').value), bmr: num($('iBmr').value) || null };
   if (!entry.date || !entry.weight || !entry.bodyFat) return alert('측정일, 체중, 체지방률은 필수입니다.');
+  if (!num(profile.age) || !num(profile.height)) return alert('기초대사량 계산을 위해 나이와 키를 입력하세요.');
   inbody = inbody.filter((i) => i.date !== entry.date).concat(entry);
   store.set('inbody', inbody);
-  renderInbody();
+  renderAnalysis();
+  $('analysis').scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
 $('analysis').onclick = (e) => {
-  if (e.target.dataset.p) profile.phase = e.target.dataset.p;
-  else if (e.target.id === 'resetPhase') profile.phase = null;
+  const t = e.target;
+  if (t.dataset.p) profile.phase = t.dataset.p;
+  else if (t.id === 'resetPhase') profile.phase = null;
+  else if (t.id === 'applyKcal') {
+    const v = num($('manualKcal').value);
+    if (v && (v < 1000 || v > 6000)) return alert('1,000~6,000 kcal 사이로 입력하세요.');
+    profile.targetKcal = v || null;
+  } else if (t.id === 'clearKcal') profile.targetKcal = null;
   else return;
   store.set('profile', profile);
-  renderInbody();
+  renderAnalysis();
+};
+
+$('foodPrefs').onclick = (e) => {
+  const key = e.target.dataset.pref;
+  if (!key) return;
+  const prefs = (profile.foodPrefs ||= {});
+  prefs[key] = { undefined: 'like', like: 'no', no: undefined }[prefs[key]];
+  if (!prefs[key]) delete prefs[key];
+  store.set('profile', profile);
+  renderFoodPrefs();
+  if (calcTargets()) renderMealPlan(calcTargets());
+};
+
+$('ibOcrFile').onchange = (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (file) runInbodyOcr(file);
 };
 
 $('saveKey').onclick = () => {

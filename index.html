@@ -67,40 +67,58 @@
     </div>
   </section>
 
-  <!-- 인바디 -->
+  <!-- 목표 -->
   <section id="tab-inbody" class="hidden">
     <div class="card">
-      <h2>기본 정보</h2>
+      <h2>인바디</h2>
+      <label class="btn ghost" style="text-align:center;flex-direction:row;justify-content:center;margin-top:0">
+        📷 인바디 결과지 사진으로 채우기<input type="file" id="ibOcrFile" accept="image/*" class="hidden">
+      </label>
+      <p class="muted hidden" id="ibOcrStatus"></p>
+      <details class="hidden" id="ibOcrRawBox"><summary>인식된 글자 보기</summary><pre id="ibOcrRaw"></pre></details>
+      <div class="grid" style="margin-top:12px">
+        <label>측정일<input id="iDate" type="date"></label>
+        <label>체중 (kg)<input id="iWeight" type="number" step="0.1" inputmode="decimal"></label>
+        <label>골격근량 (kg)<input id="iSmm" type="number" step="0.1" inputmode="decimal"></label>
+        <label>체지방률 (%)<input id="iFat" type="number" step="0.1" inputmode="decimal"></label>
+        <label>기초대사량 (선택)<input id="iBmr" type="number" inputmode="numeric" placeholder="결과지 값"></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>내 정보</h2>
       <div class="grid">
         <label>성별
           <select id="pSex"><option value="M">남성</option><option value="F">여성</option></select>
         </label>
-        <label>나이<input id="pAge" type="number"></label>
-        <label>키 (cm)<input id="pHeight" type="number"></label>
-        <label>활동량
-          <select id="pActivity">
-            <option value="1.2">거의 안 움직임</option>
-            <option value="1.375">주 1~3회 운동</option>
-            <option value="1.55">주 3~5회 운동</option>
-            <option value="1.725">주 6~7회 운동</option>
+        <label>나이<input id="pAge" type="number" inputmode="numeric"></label>
+        <label>키 (cm)<input id="pHeight" type="number" inputmode="decimal"></label>
+        <label>운동 횟수<select id="pFreq"></select></label>
+        <label>운동 종류<input id="pExercise" placeholder="예: 헬스, 러닝"></label>
+        <label>하루 평균 걸음 수<input id="pSteps" type="number" inputmode="numeric" placeholder="예: 8000"></label>
+        <label>하루 식사 횟수
+          <select id="pMeals"><option value="2">2끼</option><option value="3">3끼</option><option value="4">4끼 (간식 포함)</option></select>
+        </label>
+        <label>목표 기간
+          <select id="pPeriod">
+            <option value="1">1개월</option><option value="2">2개월</option><option value="3">3개월</option>
+            <option value="6">6개월</option><option value="12">12개월</option>
           </select>
         </label>
       </div>
     </div>
 
     <div class="card">
-      <h2>인바디 측정값</h2>
-      <div class="grid">
-        <label>측정일<input id="iDate" type="date"></label>
-        <label>체중 (kg)<input id="iWeight" type="number" step="0.1" inputmode="decimal"></label>
-        <label>골격근량 (kg)<input id="iSmm" type="number" step="0.1" inputmode="decimal"></label>
-        <label>체지방률 (%)<input id="iFat" type="number" step="0.1" inputmode="decimal"></label>
-        <label>기초대사량 (선택)<input id="iBmr" type="number" placeholder="결과지 값"></label>
-      </div>
-      <button class="btn" id="saveInbody">저장 & 분석</button>
+      <h2>식단에 쓸 음식</h2>
+      <p class="muted" style="margin-top:0">누를 때마다 ❤️ 선호 → 🚫 못 먹음 → 기본 순으로 바뀌어요.</p>
+      <div class="chips" id="foodPrefs"></div>
     </div>
 
+    <button class="btn" id="saveInbody" style="margin:0 0 14px">저장 & 분석</button>
+
     <div class="card" id="analysis"></div>
+    <div class="card hidden" id="mealPlan"></div>
+    <div class="card hidden" id="planExtras"></div>
   </section>
 
   <!-- 기록 -->
@@ -149,7 +167,7 @@
 
 <nav>
   <button data-tab="today" class="active"><span>🍽️</span>식단</button>
-  <button data-tab="inbody"><span>💪</span>인바디</button>
+  <button data-tab="inbody"><span>💪</span>목표</button>
   <button data-tab="history"><span>📅</span>달력</button>
   <button data-tab="settings"><span>⚙️</span>설정</button>
 </nav>
@@ -192,6 +210,7 @@
 </div>
 
 <script src="foods-kr.js"></script>
+<script src="plan.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

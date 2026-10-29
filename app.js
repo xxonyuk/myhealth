@@ -91,6 +91,7 @@ async function searchMfds(q) {
     return {
       src: 'mfds',
       name: it.FOOD_NM_KR,
+      home: it.DB_GRP_CM !== 'P', // 음식·원재료(집밥 재료) vs 가공식품
       brand: it.MAKER_NM && it.MAKER_NM !== '해당없음' ? it.MAKER_NM : '',
       servingLabel: perPack ? `${it.DB_GRP_CM === 'D' ? '1인분' : '1개'} (${round(g)}${unit})` : `${round(g)}${unit}`,
       servingG: g,
@@ -98,8 +99,8 @@ async function searchMfds(q) {
            sugar: ov(it.AMT_NUM7), sodium: ov(it.AMT_NUM13) },
     };
   }).filter((f) => f.name)
-    // 이름이 검색어와 똑같거나 검색어로 시작하는 것을 위로, 그다음 짧은 이름 순
-    .map((f) => ({ f, r: (f.name === q ? 0 : f.name.startsWith(q) ? 1 : 2) * 1000 + f.name.length }))
+    // 음식·원재료 먼저, 그 안에서 이름이 검색어와 같거나 검색어로 시작하는 것, 그다음 짧은 이름 순
+    .map((f) => ({ f, r: (f.home ? 0 : 10000) + (f.name === q ? 0 : f.name.startsWith(q) ? 1 : 2) * 1000 + f.name.length }))
     .sort((a, b) => a.r - b.r).map((x) => x.f);
 }
 

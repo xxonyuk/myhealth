@@ -1,5 +1,5 @@
 // 앱 파일을 캐시해 오프라인에서도 열리게 함. 온라인이면 항상 최신 파일을 먼저 받음(network-first).
-const CACHE = 'myhealth-v6';
+const CACHE = 'myhealth-v7';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'foods-kr.js', 'plan.js', 'manifest.webmanifest', 'icons/icon-180.png'];
 const SCANNER = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
 

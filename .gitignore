@@ -7,3 +7,7 @@
 # API 인증키 (로컬 전용)
 keys.txt
 *.local.*
+
+# 사진 인식 중계 서버 초대코드·사용량 (로컬 전용)
+server/codes.txt
+server/usage.json

@@ -1,6 +1,6 @@
 // ---------- 상수 ----------
 const MEALS = ['아침', '점심', '저녁', '간식'];
-const SRC_LABEL = { db: '기본', my: '내 음식', mfds: '식약처', off: '바코드DB' };  // off = Open Food Facts
+const SRC_LABEL = { db: '기본', my: '내 음식', mfds: '식약처', off: '바코드DB', ai: 'AI 추정' };  // off = Open Food Facts
 const SCANNER_URL = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
 
 // ---------- 저장소 ----------
@@ -21,6 +21,7 @@ let foods   = store.get('foods', {});    // {'YYYY-MM-DD': [{id, meal, name, amo
 let myFoods = store.get('myFoods', []);  // [음식 객체 + barcode?]
 let recent  = store.get('recent', []);   // 최근 기록한 음식 객체
 let mfdsKey = store.get('mfdsKey', '');
+let aiCfg   = store.get('ai', { url: '', code: '' });   // 사진 인식 중계 서버 주소·초대코드
 
 // 음식 객체: { src, name, brand?, barcode?, servingLabel, servingG|null, n: {kcal, carb, protein, fat} (1 제공량 기준) }
 
@@ -566,11 +567,83 @@ function renderHistory() {
 // ---------- 렌더: 설정 ----------
 function renderSettings() {
   $('mfdsKey').value = mfdsKey;
+  $('aiUrl').value = aiCfg.url;
+  $('aiCode').value = aiCfg.code;
   $('myFoodsList').innerHTML = myFoods.length ? myFoods.map((f, i) => `
     <div class="food">
       <div>${esc(f.name)}<br><small>${esc(f.servingLabel)} · ${round(f.n.kcal)} kcal${f.barcode ? ` · 바코드 ${esc(f.barcode)}` : ''}</small></div>
       <button data-delmy="${i}" title="삭제">×</button>
     </div>`).join('') : `<p class="muted">저장된 음식이 없어요.</p>`;
+}
+
+// ---------- AI 사진 인식 (내 PC의 중계 서버 → Ollama) ----------
+let aiItems = [];
+
+async function aiFetch(path, opts = {}) {
+  const res = await fetch(aiCfg.url.replace(/\/+$/, '') + path, {
+    ...opts, headers: { 'X-Invite-Code': aiCfg.code, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
+  return data;
+}
+
+// 사진을 긴 변 1280px JPEG로 줄여서 전송량과 추론 시간을 줄임
+async function shrinkImage(file) {
+  const img = await createImageBitmap(file);
+  const k = Math.min(1, 1280 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * k);
+  c.height = Math.round(img.height * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
+function aiToFood(it) {
+  const g = it.grams > 0 ? it.grams : null;
+  return {
+    src: 'ai', name: it.name, brand: it.brand || '',
+    servingLabel: g ? `사진 속 양 (${round(g)}g)` : '사진 속 양', servingG: g,
+    n: { kcal: it.kcal, carb: it.carb, protein: it.protein, fat: it.fat, sugar: it.sugar, sodium: it.sodium },
+  };
+}
+
+const CONF_LABEL = { high: '확실', medium: '보통', low: '불확실' };
+
+function renderAiResults() {
+  $('aiResults').innerHTML = aiItems.map((it, i) => `
+    <div class="result" data-ai="${i}">
+      <div><span class="src ai">AI 추정</span>${esc(it.name)}
+        <br><small class="muted">${[it.brand, `신뢰도 ${CONF_LABEL[it.confidence] || '–'}`].filter(Boolean).map(esc).join(' · ')}</small></div>
+      <div style="white-space:nowrap;text-align:right">${round(it.kcal)} kcal<br><small class="muted">${it.grams ? `${round(it.grams)}g` : ''}</small></div>
+    </div>`).join('')
+    // 줄을 누르면 기록, 아래 칩을 누르면 식약처 공식 값으로 다시 검색 (실수로 누르지 않게 분리)
+    + (aiItems.length ? `<div class="chips"><small class="muted" style="align-self:center">식약처 값으로 찾기</small>
+      ${aiItems.map((it, i) => `<button data-aisearch="${i}">🔍 ${esc(it.search_name || it.name)}</button>`).join('')}</div>` : '');
+}
+
+async function runAi(file) {
+  const status = $('aiStatus');
+  status.classList.remove('hidden');
+  aiItems = [];
+  renderAiResults();
+  try {
+    status.textContent = '사진 준비 중…';
+    const image = await shrinkImage(file);
+    status.textContent = 'AI가 사진을 보는 중… (몇 초~수십 초)';
+    const data = await aiFetch('/analyze', { method: 'POST', body: JSON.stringify({ image }) });
+    aiItems = data.items || [];
+    status.textContent = aiItems.length
+      ? `${aiItems.length}개 인식 · 눌러서 양을 고치고 기록하세요. 값은 추정치예요.${data.note ? ` (${data.note})` : ''} · 오늘 ${data.remaining}회 남음`
+      : `음식을 찾지 못했어요.${data.note ? ` (${data.note})` : ''}`;
+    renderAiResults();
+  } catch (e) {
+    status.textContent = e.name === 'TypeError' ? 'AI 서버에 연결하지 못했어요. 서버 PC가 꺼져 있을 수 있어요.' : e.message;
+  }
+}
+
+function updateAiButton() {
+  $('aiBtn').classList.toggle('hidden', !(aiCfg.url && aiCfg.code));
 }
 
 // ---------- 바코드 스캐너 ----------
@@ -908,6 +981,25 @@ $('mealList').onclick = (e) => {
 };
 
 $('scanBtn').onclick = openScanner;
+$('aiFile').onchange = (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (file) runAi(file);
+};
+$('aiResults').onclick = (e) => {
+  const search = e.target.dataset.aisearch;
+  if (search !== undefined) {
+    const it = aiItems[search];
+    $('searchInput').value = it.search_name || it.name;
+    runSearch($('searchInput').value);
+    return;
+  }
+  const el = e.target.closest('[data-ai]');
+  if (!el) return;
+  const food = aiToFood(aiItems[el.dataset.ai]);
+  openFoodSheet(food);
+  if (food.servingG) { $('sUnit').value = 'g'; $('sAmount').value = round(food.servingG); updateSheetMacros(); }
+};
 $('ocrFile').onchange = (e) => {
   const file = e.target.files[0];
   e.target.value = '';
@@ -988,6 +1080,22 @@ $('saveKey').onclick = () => {
   alert(mfdsKey ? '저장했어요. 오늘 탭에서 검색해보세요.' : '키를 지웠어요.');
 };
 
+$('saveAi').onclick = async () => {
+  aiCfg = { url: $('aiUrl').value.trim(), code: $('aiCode').value.trim() };
+  store.set('ai', aiCfg);
+  updateAiButton();
+  const out = $('aiCheck');
+  out.classList.remove('hidden');
+  if (!aiCfg.url || !aiCfg.code) { out.textContent = '사진 인식을 껐어요.'; return; }
+  out.textContent = '연결 확인 중…';
+  try {
+    const d = await aiFetch('/health');
+    out.textContent = `연결됐어요${d.name ? ` (${d.name})` : ''} · 오늘 ${d.remaining}/${d.limit}회 남음`;
+  } catch (e) {
+    out.textContent = e.name === 'TypeError' ? '서버에 연결하지 못했어요. 주소를 확인하거나 서버 PC가 켜져 있는지 확인하세요.' : e.message;
+  }
+};
+
 $('myFoodsList').onclick = (e) => {
   const i = e.target.dataset.delmy;
   if (i === undefined || !confirm(`"${myFoods[i].name}"을(를) 내 음식에서 삭제할까요?`)) return;
@@ -1027,4 +1135,5 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
+updateAiButton();
 goToDate(new Date());

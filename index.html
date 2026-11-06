@@ -41,6 +41,11 @@
         <input id="searchInput" type="search" placeholder="음식 검색 (예: 닭가슴살, 김밥)" enterkeyhint="search">
         <button class="btn small" id="scanBtn" title="바코드 스캔">📷</button>
       </div>
+      <label class="btn ghost hidden" id="aiBtn" style="text-align:center;flex-direction:row;justify-content:center;margin-top:10px">
+        🤖 사진으로 음식 인식 (AI 추정)<input type="file" id="aiFile" accept="image/*" class="hidden">
+      </label>
+      <p class="muted hidden" id="aiStatus"></p>
+      <div class="results" id="aiResults"></div>
       <div class="chips" id="recentChips"></div>
       <div class="results" id="results"></div>
 
@@ -151,6 +156,16 @@
         <b>일반 인증키 (Decoding)</b>를 넣으면 수만 개의 음식·가공식품을 검색할 수 있어요.</p>
       <input id="mfdsKey" placeholder="인증키 붙여넣기">
       <button class="btn" id="saveKey">저장</button>
+    </div>
+    <div class="card">
+      <h2>AI 사진 인식</h2>
+      <p class="muted">받은 서버 주소와 초대코드를 넣으면 식단 탭에서 사진으로 음식을 인식할 수 있어요. 결과는 AI 추정치예요.</p>
+      <div class="grid">
+        <label>서버 주소<input id="aiUrl" placeholder="https://..." inputmode="url" autocapitalize="off"></label>
+        <label>초대코드<input id="aiCode" autocapitalize="off" autocomplete="off"></label>
+      </div>
+      <button class="btn" id="saveAi">저장 &amp; 연결 확인</button>
+      <p class="muted hidden" id="aiCheck"></p>
     </div>
     <div class="card">
       <h2>내 음식</h2>

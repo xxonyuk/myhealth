@@ -145,3 +145,4 @@ table.plan .meal-head td { background: var(--bg); font-weight: 700; padding-top:
 table.plan .total td { font-weight: 800; border-top: 2px solid var(--text); }
 table.plan .muted-row td { color: var(--muted); }
 ul { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.7; }
+.src.ai { background: #ede9fe; color: #6d28d9; }

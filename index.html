@@ -159,12 +159,30 @@
     </div>
     <div class="card">
       <h2>AI 사진 인식</h2>
-      <p class="muted">받은 서버 주소와 초대코드를 넣으면 식단 탭에서 사진으로 음식을 인식할 수 있어요. 결과는 AI 추정치예요.</p>
-      <div class="grid">
-        <label>서버 주소<input id="aiUrl" placeholder="https://..." inputmode="url" autocapitalize="off"></label>
-        <label>초대코드<input id="aiCode" autocapitalize="off" autocomplete="off"></label>
+      <div id="aiOut">
+        <p class="muted" style="margin-top:0">관리자에게 받은 서버 주소, ID, 임시 비밀번호로 로그인하세요. 처음 로그인하면 비밀번호를 바꿔요. 인식 결과는 AI 추정치예요.</p>
+        <label>서버 주소<input id="aiUrl" placeholder="https://..." inputmode="url" autocapitalize="off" autocorrect="off"></label>
+        <div class="grid" style="margin-top:10px">
+          <label>ID<input id="aiId" autocapitalize="off" autocorrect="off" autocomplete="username"></label>
+          <label>비밀번호<input id="aiPw" type="password" autocomplete="current-password"></label>
+        </div>
+        <button class="btn" id="aiLogin">로그인</button>
       </div>
-      <button class="btn" id="saveAi">저장 &amp; 연결 확인</button>
+      <div id="aiIn" class="hidden">
+        <p id="aiWho" style="margin-top:0"></p>
+        <div id="aiPwBox" class="hidden">
+          <p class="muted" id="aiPwNote"></p>
+          <div class="grid">
+            <label>지금 비밀번호<input id="aiOld" type="password" autocomplete="current-password"></label>
+            <label>새 비밀번호 (8자 이상)<input id="aiNew" type="password" autocomplete="new-password"></label>
+          </div>
+          <button class="btn" id="aiChangePw">비밀번호 바꾸기</button>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn ghost" id="aiPwToggle" style="margin:0">비밀번호 변경</button>
+          <button class="btn ghost" id="aiLogout" style="margin:0">로그아웃</button>
+        </div>
+      </div>
       <p class="muted hidden" id="aiCheck"></p>
     </div>
     <div class="card">

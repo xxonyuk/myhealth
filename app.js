@@ -21,7 +21,7 @@ let foods   = store.get('foods', {});    // {'YYYY-MM-DD': [{id, meal, name, amo
 let myFoods = store.get('myFoods', []);  // [음식 객체 + barcode?]
 let recent  = store.get('recent', []);   // 최근 기록한 음식 객체
 let mfdsKey = store.get('mfdsKey', '');
-let aiCfg   = store.get('ai', { url: '', code: '' });   // 사진 인식 중계 서버 주소·초대코드
+let aiCfg   = { url: '', token: '', id: '', name: '', mustChange: false, ...store.get('ai', {}) };   // 사진 인식 서버 주소·로그인 정보
 
 // 음식 객체: { src, name, brand?, barcode?, servingLabel, servingG|null, n: {kcal, carb, protein, fat} (1 제공량 기준) }
 
@@ -567,8 +567,8 @@ function renderHistory() {
 // ---------- 렌더: 설정 ----------
 function renderSettings() {
   $('mfdsKey').value = mfdsKey;
-  $('aiUrl').value = aiCfg.url;
-  $('aiCode').value = aiCfg.code;
+  renderAiAccount();
+  if (aiCfg.token) aiFetch('/me').then((d) => { applyMe(d); aiMsg(quotaText(d)); }).catch((e) => aiMsg(netError(e)));
   $('myFoodsList').innerHTML = myFoods.length ? myFoods.map((f, i) => `
     <div class="food">
       <div>${esc(f.name)}<br><small>${esc(f.servingLabel)} · ${round(f.n.kcal)} kcal${f.barcode ? ` · 바코드 ${esc(f.barcode)}` : ''}</small></div>
@@ -581,9 +581,13 @@ let aiItems = [];
 
 async function aiFetch(path, opts = {}) {
   const res = await fetch(aiCfg.url.replace(/\/+$/, '') + path, {
-    ...opts, headers: { 'X-Invite-Code': aiCfg.code, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+    ...opts, headers: {
+      ...(aiCfg.token ? { Authorization: `Bearer ${aiCfg.token}` } : {}),
+      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+    },
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && aiCfg.token && path !== '/password') setAiAccount({ token: '' });   // 로그인 만료·정지·비번 초기화
   if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
   return data;
 }
@@ -643,8 +647,44 @@ async function runAi(file) {
 }
 
 function updateAiButton() {
-  $('aiBtn').classList.toggle('hidden', !(aiCfg.url && aiCfg.code));
+  $('aiBtn').classList.toggle('hidden', !(aiCfg.url && aiCfg.token));
 }
+
+function setAiAccount(patch) {
+  aiCfg = { ...aiCfg, ...patch };
+  store.set('ai', aiCfg);
+  updateAiButton();
+  renderAiAccount();
+}
+
+// 서버 응답(로그인·비번 변경·내 정보)에서 계정 상태 반영
+function applyMe(d) {
+  setAiAccount({ ...(d.token ? { token: d.token } : {}), id: d.id, name: d.name, mustChange: d.must_change });
+  return d;
+}
+
+const quotaText = (d) => (d.limit ? `오늘 ${d.remaining}/${d.limit}회 남음` : '무제한');
+
+function renderAiAccount() {
+  const on = !!aiCfg.token;
+  $('aiOut').classList.toggle('hidden', on);
+  $('aiIn').classList.toggle('hidden', !on);
+  $('aiUrl').value = aiCfg.url;
+  $('aiId').value = aiCfg.id;
+  $('aiWho').innerHTML = on ? `<b>${esc(aiCfg.name || aiCfg.id)}</b> (${esc(aiCfg.id)})로 로그인됨` : '';
+  if (aiCfg.mustChange) {
+    $('aiPwBox').classList.remove('hidden');
+    $('aiPwNote').textContent = '임시 비밀번호예요. 사진 인식을 쓰려면 먼저 비밀번호를 바꿔 주세요.';
+  }
+  $('aiPwToggle').classList.toggle('hidden', aiCfg.mustChange);
+}
+
+function aiMsg(text) {
+  $('aiCheck').classList.toggle('hidden', !text);
+  $('aiCheck').textContent = text;
+}
+
+const netError = (e) => (e.name === 'TypeError' ? '서버에 연결하지 못했어요. 주소를 확인하거나 서버 PC가 켜져 있는지 확인하세요.' : e.message);
 
 // ---------- 바코드 스캐너 ----------
 let scanner = null;
@@ -1080,20 +1120,35 @@ $('saveKey').onclick = () => {
   alert(mfdsKey ? '저장했어요. 오늘 탭에서 검색해보세요.' : '키를 지웠어요.');
 };
 
-$('saveAi').onclick = async () => {
-  aiCfg = { url: $('aiUrl').value.trim(), code: $('aiCode').value.trim() };
-  store.set('ai', aiCfg);
-  updateAiButton();
-  const out = $('aiCheck');
-  out.classList.remove('hidden');
-  if (!aiCfg.url || !aiCfg.code) { out.textContent = '사진 인식을 껐어요.'; return; }
-  out.textContent = '연결 확인 중…';
+$('aiLogin').onclick = async () => {
+  const url = $('aiUrl').value.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(url)) return aiMsg('서버 주소는 https://로 시작해야 해요.');
+  aiCfg.url = url;
+  aiMsg('로그인 중…');
   try {
-    const d = await aiFetch('/health');
-    out.textContent = `연결됐어요${d.name ? ` (${d.name})` : ''} · 오늘 ${d.remaining}/${d.limit}회 남음`;
-  } catch (e) {
-    out.textContent = e.name === 'TypeError' ? '서버에 연결하지 못했어요. 주소를 확인하거나 서버 PC가 켜져 있는지 확인하세요.' : e.message;
-  }
+    const d = applyMe(await aiFetch('/login', { method: 'POST', body: JSON.stringify({ id: $('aiId').value.trim(), password: $('aiPw').value }) }));
+    $('aiPw').value = '';
+    aiMsg(d.must_change ? '로그인했어요. 비밀번호를 바꿔 주세요.' : `로그인했어요 · ${quotaText(d)}`);
+  } catch (e) { aiMsg(netError(e)); }
+};
+
+$('aiChangePw').onclick = async () => {
+  aiMsg('바꾸는 중…');
+  try {
+    const d = applyMe(await aiFetch('/password', { method: 'POST', body: JSON.stringify({ old: $('aiOld').value, new: $('aiNew').value }) }));
+    $('aiOld').value = $('aiNew').value = '';
+    $('aiPwBox').classList.add('hidden');
+    aiMsg(`비밀번호를 바꿨어요 · ${quotaText(d)}`);
+  } catch (e) { aiMsg(netError(e)); }
+};
+
+$('aiPwToggle').onclick = () => $('aiPwBox').classList.toggle('hidden');
+
+$('aiLogout').onclick = async () => {
+  aiFetch('/logout', { method: 'POST', body: '{}' }).catch(() => {});
+  setAiAccount({ token: '', mustChange: false });
+  $('aiPwBox').classList.add('hidden');
+  aiMsg('로그아웃했어요.');
 };
 
 $('myFoodsList').onclick = (e) => {
